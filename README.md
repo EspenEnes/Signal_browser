@@ -13,7 +13,7 @@
 ## Installation
 
 ```console
-pip install signal-browser
+pip install git+https://github.com/EspenEnes/SigBrowser
 ```
 
 ## License

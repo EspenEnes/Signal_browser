@@ -2,15 +2,11 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+
+
 [tool.hatch.build]
 ignore-vcs = true
 
-
-[tool.hatch.build]
-include = [
-  "signal-browser/src/signal_browser/*.py",
-  "/tests",
-]
 
 [project]
 name = "signal-browser"
@@ -34,10 +30,15 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
+dependencies = [
+"dash",
+"PySide6",
+"pandas",
+  "tdm-loader"
+]
 
-#[project.gui-scripts]
-#gui-name = "signal_browser.dropdowns:main"
+[project.gui-scripts]
+signal_browser = "signal_browser.dropdowns:main"
 
 [project.urls]
 Documentation = "https://github.com/unknown/signal-browser#readme"
