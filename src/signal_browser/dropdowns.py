@@ -139,56 +139,76 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_double_clicked(self, index: QtCore.QModelIndex):
         """Finds the channel names and adds them to the tree view"""
-
         if self.file_type == FileType.TDM:
-            if index.data(999)["node"] != "root":
-                return
-            group = index.data(999)["id"]
-            group_node = self._tree_view.model().itemFromIndex(index)
-            for ix, channel in enumerate(self.tdms_file._channels_xml(group)):
-                name = channel.findtext("name")
-                channel_node = QtGui.QStandardItem(name)
-                channel_node.setData(dict(id=ix, node="leaf"), 999)
-                channel_node.setCheckable(True)
-                group_node.appendRow(channel_node)
+            self.handle_tdm_file(index)
         elif self.file_type == FileType.DAT:
-            if index.data(999)["node"] != "root":
-                return
-            table = index.data(999)["id"]
-            group_node = self._tree_view.model().itemFromIndex(index)
-            # Connect to the SQLite database
-            conn = sqlite3.connect(self.filename)
-            # Create a cursor object
-            cur = conn.cursor()
-            # Execute the SQL query
-            cur.execute(f"SELECT rti_json_sample FROM '{table}';")
-            # Fetch all rows from the executed SQL query
-            rows = cur.fetchall()
-            # Close the connection
-            conn.close()
+            self.handle_dat_file(index)
 
-            channels = {}
-            for row in rows:
-                if row[0] is not None:
-                    json_data = json.loads(row[0])
-                    for key in json_data.keys():
-                        if key not in channels:
-                            channels[key] = type(json_data[key])
+
+    def handle_tdm_file(self, index: QtCore.QModelIndex):
+        """Handles TDM file type"""
+        if index.data(999)["node"] != "root":
+            return
+        group = index.data(999)["id"]
+        group_node = self._tree_view.model().itemFromIndex(index)
+        channels = self.get_channels_from_tdm(group)
+        for ix, name in channels:
+            channel_node = self.create_standard_item(name, ix)
+            group_node.appendRow(channel_node)
 
 
 
+    def handle_dat_file(self, index: QtCore.QModelIndex):
+        """Handles DAT file type"""
+        if index.data(999)["node"] != "root":
+            return
+        table = index.data(999)["id"]
+        group_node = self._tree_view.model().itemFromIndex(index)
+        channels = self.get_channels_from_sqlite(table)
+        for key, value in channels.items():
+            name = key
+            channel_node = self.create_standard_item(name, name, data_type=value)
+            group_node.appendRow(channel_node)
 
-            for key, value in channels.items():
 
-                name = key
-                channel_node = QtGui.QStandardItem(name)
-                channel_node.setData(dict(id=name, node="leaf"), 999)
-                channel_node.setCheckable(True)
-                if value == int or value == float:
-                    channel_node.setEnabled(True)
-                else:
-                    channel_node.setEnabled(False)
-                group_node.appendRow(channel_node)
+    def create_standard_item(self, name: str, idx: int | str, data_type=None):
+        """Creates a standard QStandardItem"""
+        channel_node = QtGui.QStandardItem(name)
+        channel_node.setData(dict(id=idx, node="leaf"), 999)
+        channel_node.setCheckable(True)
+        if data_type in [int, float]:
+            channel_node.setEnabled(True)
+        elif data_type is not None:
+            channel_node.setEnabled(False)
+        return channel_node
+
+
+    def get_channels_from_sqlite(self, table: str):
+        """Connects to the SQLite database and get channels"""
+        # Connect to the SQLite database
+        conn = sqlite3.connect(self.filename)
+        # Create a cursor object
+        cur = conn.cursor()
+        # Execute the SQL query
+        cur.execute(f"SELECT rti_json_sample FROM '{table}';")
+        # Fetch all rows from the executed SQL query
+        rows = cur.fetchall()
+        # Close the connection
+        conn.close()
+        channels = {}
+        for row in rows:
+            if row[0] is not None:
+                json_data = json.loads(row[0])
+                for key in json_data.keys():
+                    if key not in channels:
+                        channels[key] = type(json_data[key])
+        return channels
+
+    def get_channels_from_tdm(self, group):
+        """Fetches channels from the TDM file"""
+        return [(ix, channel.findtext("name")) for ix, channel in enumerate(self.tdms_file._channels_xml(group))]
+
+
 
     def get_timestamp_from_json(self, data: dict) -> datetime:
         """convert timestamp from json to datetime.datetime:
