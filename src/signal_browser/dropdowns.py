@@ -163,25 +163,27 @@ class MainWindow(QtWidgets.QMainWindow):
             # Close the connection
             conn.close()
 
-            channels = []
-
-
+            channels = {}
             for row in rows:
                 if row[0] is not None:
                     json_data = json.loads(row[0])
                     for key in json_data.keys():
                         if key not in channels:
-                            channels.append(key)
+                            channels[key] = type(json_data[key])
 
 
 
 
-            for channel in channels:
+            for key, value in channels.items():
 
-                name = channel
+                name = key
                 channel_node = QtGui.QStandardItem(name)
                 channel_node.setData(name, 999)
                 channel_node.setCheckable(True)
+                if value == int or value == float:
+                    channel_node.setEnabled(True)
+                else:
+                    channel_node.setEnabled(False)
                 group_node.appendRow(channel_node)
 
     def get_timestamp_from_json(self, data: dict) -> datetime:
