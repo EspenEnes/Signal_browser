@@ -176,7 +176,7 @@ class MainWindow(QtWidgets.QMainWindow):
         channel_node = QtGui.QStandardItem(name)
         channel_node.setData(dict(id=idx, node="leaf"), 999)
         channel_node.setCheckable(True)
-        if data_type in [int, float]:
+        if data_type in [int, float, bool]:
             channel_node.setEnabled(True)
         elif data_type is not None:
             channel_node.setEnabled(False)
@@ -202,7 +202,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 json_data = json.loads(row[0])
                 for key in json_data.keys():
                     if key not in channels:
-                        channels[key] = type(json_data[key])
+                        if str(json_data[key]).lower() in ["false", "true"]:
+                            channels[key] = bool
+                        else:
+                            channels[key] = type(json_data[key])
+
+
+
+
+
         return channels
 
     def get_channels_from_tdm(self, group):
@@ -270,7 +278,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 timestamp = self.get_timestamp_from_json(json_data["timestamp"])
             else:
                 timestamp = self.get_timestamp_from_ns(table_timestamp)
-            rti_sample[timestamp] = json_data[item.data(999)["id"]]
+
+            if type(json_data[item.data(999)["id"]]) == bool:
+                if json_data[item.data(999)["id"]]:
+                    boolean = 1
+                else:
+                    boolean = 0
+                rti_sample[timestamp] = boolean
+            else:
+                rti_sample[timestamp] = json_data[item.data(999)["id"]]
         df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
         self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text())
 
