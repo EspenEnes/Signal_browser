@@ -77,7 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node = QtGui.QStandardItem(
                 f"{self.tdms_file.channel_group_name(group)} - [{self.tdms_file.no_channels(group)}]")
             group_node.setEditable(False)
-            group_node.setData(group, 999)
+            group_node.setData(dict(id=group, node="root"), 999)
             root_node.appendRow(group_node)
 
     def load_dat_file(self, filename):
@@ -106,7 +106,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         group_node = QtGui.QStandardItem(
                             f"{table}")
                         group_node.setEditable(False)
-                        group_node.setData(table, 999)
+                        group_node.setData(dict(id=table, node="root"), 999)
                         root_node.appendRow(group_node)
 
 
@@ -141,16 +141,20 @@ class MainWindow(QtWidgets.QMainWindow):
         """Finds the channel names and adds them to the tree view"""
 
         if self.file_type == FileType.TDM:
-            group = index.data(999)
+            if index.data(999)["node"] != "root":
+                return
+            group = index.data(999)["id"]
             group_node = self._tree_view.model().itemFromIndex(index)
             for ix, channel in enumerate(self.tdms_file._channels_xml(group)):
                 name = channel.findtext("name")
                 channel_node = QtGui.QStandardItem(name)
-                channel_node.setData(ix, 999)
+                channel_node.setData(dict(id=ix, node="leaf"), 999)
                 channel_node.setCheckable(True)
                 group_node.appendRow(channel_node)
         elif self.file_type == FileType.DAT:
-            table = index.data(999)
+            if index.data(999)["node"] != "root":
+                return
+            table = index.data(999)["id"]
             group_node = self._tree_view.model().itemFromIndex(index)
             # Connect to the SQLite database
             conn = sqlite3.connect(self.filename)
@@ -178,7 +182,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
                 name = key
                 channel_node = QtGui.QStandardItem(name)
-                channel_node.setData(name, 999)
+                channel_node.setData(dict(id=name, node="leaf"), 999)
                 channel_node.setCheckable(True)
                 if value == int or value == float:
                     channel_node.setEnabled(True)
@@ -199,9 +203,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.file_type == FileType.TDM:
             if item.isCheckable():
                 if item.checkState() == QtCore.Qt.CheckState.Checked:
-                    y = pd.Series(self.tdms_file.channel(item.parent().data(999), 0))
+                    y = pd.Series(self.tdms_file.channel(item.parent().data(999)["id"], 0))
                     y = y.apply(self.zeroEpoctimestamp_to_datetime)
-                    data = self.tdms_file.channel(item.parent().data(999), item.data(999))
+                    data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
                     self.fig.add_trace(go.Scatter(x=y, y=data, mode='lines', name=item.text()))
 
                     self.qdask.update_graph(self.fig)
@@ -217,7 +221,7 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.file_type == FileType.DAT:
             if item.isCheckable():
                 if item.checkState() == QtCore.Qt.CheckState.Checked:
-                    table = item.parent().data(999)
+                    table = item.parent().data(999)["id"]
 
                     # Connect to the SQLite database
                     conn = sqlite3.connect(self.filename)
@@ -234,7 +238,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     for row in rows:
                         json_data = json.loads(row[0])
                         if "timestamp" in json_data:
-                            rti_sample[self.get_timestamp_from_json(json_data["timestamp"])] = json_data[item.data(999)]
+                            rti_sample[self.get_timestamp_from_json(json_data["timestamp"])] = json_data[item.data(999)["id"]]
 
                     df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
                     self.fig.add_trace(go.Scatter(x=df.index, y=df.iloc[:, 0], mode='lines', name=item.text()))
