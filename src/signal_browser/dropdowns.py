@@ -164,7 +164,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         table = index.data(999)["id"]
         group_node = self._tree_view.model().itemFromIndex(index)
-        channels = self.get_channels_from_sqlite(table)
+        channels = self.get_channels_from_rti_json_sample(table)
         for key, value in channels.items():
             name = key
             channel_node = self.create_standard_item(name, name, data_type=value)
@@ -183,8 +183,9 @@ class MainWindow(QtWidgets.QMainWindow):
         return channel_node
 
 
-    def get_channels_from_sqlite(self, table: str):
-        """Connects to the SQLite database and get channels"""
+    def get_channels_from_rti_json_sample(self, table: str):
+        """Connects to the SQLite database and get rti_json_sample,
+        only add channels that contains data in the rti_json_sample column"""
         # Connect to the SQLite database
         conn = sqlite3.connect(self.filename)
         # Create a cursor object
@@ -215,6 +216,12 @@ class MainWindow(QtWidgets.QMainWindow):
         element data timestamp: {sec:, nanosec:}"""
         return datetime.fromtimestamp(data["sec"]) + timedelta(
             microseconds=data["nanosec"] / 1000)
+
+    def get_timestamp_from_ns(self, ns_value: int) -> datetime:
+        """convert ns unixtime to datetime.datetime"""
+        ns_value_s = ns_value // 1000000000
+        ns_value_ns = ns_value % 1000000000
+        return datetime.fromtimestamp(ns_value_s) + timedelta(microseconds=ns_value_ns / 1000)
 
     def on_item_changed(self, item):
         """Adds the traces to the graph if the item is checked"""
@@ -252,12 +259,18 @@ class MainWindow(QtWidgets.QMainWindow):
         table = item.parent().data(999)["id"]
         conn = sqlite3.connect(self.filename)
         cur = conn.cursor()
-        cur.execute(f"SELECT rti_json_sample FROM '{table}';")
+        cur.execute(f"SELECT rti_json_sample, SampleInfo_reception_timestamp FROM '{table}';")
         rows = cur.fetchall()
         conn.close()
-        rti_sample = {
-            self.get_timestamp_from_json(json.loads(row[0])["timestamp"]): json.loads(row[0])[item.data(999)["id"]] for row
-            in rows if "timestamp" in json.loads(row[0])}
+
+        rti_sample = {}
+        for data, table_timestamp in rows:
+            json_data = json.loads(data)
+            if "timestamp" in json_data:
+                timestamp = self.get_timestamp_from_json(json_data["timestamp"])
+            else:
+                timestamp = self.get_timestamp_from_ns(table_timestamp)
+            rti_sample[timestamp] = json_data[item.data(999)["id"]]
         df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
         self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text())
 
