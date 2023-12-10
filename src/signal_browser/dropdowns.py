@@ -15,6 +15,7 @@ from signal_browser.qt_dash import DashThread
 class FileType(Enum):
     TDM = auto()
     DAT = auto()
+    DB = auto()
     NONE = auto()
 
 
@@ -43,7 +44,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def connect_signals(self):
         """Connects the signals to the slots"""
         self._tree_view.doubleClicked.connect(self.on_double_clicked)
-        self._standard_model.itemChanged.connect(self.on_item_changed)
+        self._standard_model.itemChanged.connect(self.on_channel_check)
 
     def create_layout(self):
         """Creates the layout for the main window"""
@@ -79,6 +80,7 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node.setEditable(False)
             group_node.setData(dict(id=group, node="root"), 999)
             root_node.appendRow(group_node)
+        self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
     def load_dat_file(self, filename):
         self._standard_model.clear()
@@ -108,6 +110,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         group_node.setEditable(False)
                         group_node.setData(dict(id=table, node="root"), 999)
                         root_node.appendRow(group_node)
+        self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
 
         conn.close()
@@ -119,12 +122,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.file_type = FileType.NONE
 
-        self.filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", "", "TDM (*.tdm *.dat)")
+        self.filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", "", "TDM (*.tdm *.dat *.db)")
         match pathlib.Path(self.filename).suffix.lower():
-            case ".tdm":
+            case ".tdm" :
                 self.load_tdm_file(self.filename)
                 self.file_type = FileType.TDM
-            case ".dat":
+            case ".dat" | ".db":
                 self.load_dat_file(self.filename)
                 self.file_type = FileType.DAT
 
@@ -153,8 +156,9 @@ class MainWindow(QtWidgets.QMainWindow):
         group_node = self._tree_view.model().itemFromIndex(index)
         channels = self.get_channels_from_tdm(group)
         for ix, name in channels:
-            channel_node = self.create_standard_item(name, ix)
+            channel_node = self.create_channel_item(name, ix)
             group_node.appendRow(channel_node)
+        self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
 
 
@@ -167,11 +171,12 @@ class MainWindow(QtWidgets.QMainWindow):
         channels = self.get_channels_from_rti_json_sample(table)
         for key, value in channels.items():
             name = key
-            channel_node = self.create_standard_item(name, name, data_type=value)
+            channel_node = self.create_channel_item(name, name, data_type=value)
             group_node.appendRow(channel_node)
+        self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
 
-    def create_standard_item(self, name: str, idx: int | str, data_type=None):
+    def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
         channel_node.setData(dict(id=idx, node="leaf"), 999)
@@ -193,19 +198,19 @@ class MainWindow(QtWidgets.QMainWindow):
         # Execute the SQL query
         cur.execute(f"SELECT rti_json_sample FROM '{table}';")
         # Fetch all rows from the executed SQL query
-        rows = cur.fetchall()
+        row = cur.fetchone()
         # Close the connection
         conn.close()
         channels = {}
-        for row in rows:
-            if row[0] is not None:
-                json_data = json.loads(row[0])
-                for key in json_data.keys():
-                    if key not in channels:
-                        if str(json_data[key]).lower() in ["false", "true"]:
-                            channels[key] = bool
-                        else:
-                            channels[key] = type(json_data[key])
+
+        if row[0] is not None:
+            json_data = json.loads(row[0])
+            for key in json_data.keys():
+                if key not in channels:
+                    if str(json_data[key]).lower() in ["false", "true"]:
+                        channels[key] = bool
+                    else:
+                        channels[key] = type(json_data[key])
 
 
 
@@ -227,11 +232,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def get_timestamp_from_ns(self, ns_value: int) -> datetime:
         """convert ns unixtime to datetime.datetime"""
-        ns_value_s = ns_value // 1000000000
-        ns_value_ns = ns_value % 1000000000
-        return datetime.fromtimestamp(ns_value_s) + timedelta(microseconds=ns_value_ns / 1000)
+        return datetime.fromtimestamp(ns_value / 1e9)
 
-    def on_item_changed(self, item):
+    def on_channel_check(self, item):
         """Adds the traces to the graph if the item is checked"""
         if not item.isCheckable():
             return
@@ -240,9 +243,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return self._remove_trace_by_item_name(item.text())
 
         if self.file_type == FileType.TDM:
-            self._handle_tdm_item_change(item)
+            self._get_tdm_channel_data(item)
         elif self.file_type == FileType.DAT:
-            self._handle_dat_item_change(item)
+            self._get_dat_channel_data(item)
 
 
     def _remove_trace_by_item_name(self, item_name):
@@ -255,14 +258,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 break
 
 
-    def _handle_tdm_item_change(self, item):
+    def _get_tdm_channel_data(self, item):
         """Handles changes for TDM items"""
         y = pd.Series(self.tdms_file.channel(item.parent().data(999)["id"], 0))
         y = y.apply(self.zeroEpoctimestamp_to_datetime)
         data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
         self._add_scatter_trace_to_fig(y, data, item.text())
 
-    def _handle_dat_item_change(self, item):
+    def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
         table = item.parent().data(999)["id"]
         conn = sqlite3.connect(self.filename)
