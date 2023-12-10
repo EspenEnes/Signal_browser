@@ -10,7 +10,7 @@ import pandas as pd
 import tdm_loader
 import pathlib
 
-from src.signal_browser.qt_dash import DashThread
+from signal_browser.qt_dash import DashThread
 
 class FileType(Enum):
     TDM = auto()
