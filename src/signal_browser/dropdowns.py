@@ -216,61 +216,57 @@ class MainWindow(QtWidgets.QMainWindow):
         return datetime.fromtimestamp(data["sec"]) + timedelta(
             microseconds=data["nanosec"] / 1000)
 
-
     def on_item_changed(self, item):
         """Adds the traces to the graph if the item is checked"""
+        if not item.isCheckable():
+            return
+
+        if item.checkState() != QtCore.Qt.CheckState.Checked:
+            return self._remove_trace_by_item_name(item.text())
 
         if self.file_type == FileType.TDM:
-            if item.isCheckable():
-                if item.checkState() == QtCore.Qt.CheckState.Checked:
-                    y = pd.Series(self.tdms_file.channel(item.parent().data(999)["id"], 0))
-                    y = y.apply(self.zeroEpoctimestamp_to_datetime)
-                    data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
-                    self.fig.add_trace(go.Scatter(x=y, y=data, mode='lines', name=item.text()))
-
-                    self.qdask.update_graph(self.fig)
-                    self.browser.reload()
-
-                else:
-                    for ix, trace in enumerate(self.fig.data):
-                        if trace.name == item.text():
-                            self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
-                            self.qdask.update_graph(self.fig)
-                            self.browser.reload()
-                            break
+            self._handle_tdm_item_change(item)
         elif self.file_type == FileType.DAT:
-            if item.isCheckable():
-                if item.checkState() == QtCore.Qt.CheckState.Checked:
-                    table = item.parent().data(999)["id"]
+            self._handle_dat_item_change(item)
 
-                    # Connect to the SQLite database
-                    conn = sqlite3.connect(self.filename)
-                    # Create a cursor object
-                    cur = conn.cursor()
-                    # Execute the SQL query
-                    cur.execute(f"SELECT rti_json_sample FROM '{table}';")
-                    # Fetch all rows from the executed SQL query
-                    rows = cur.fetchall()
-                    # Close the connection
-                    conn.close()
 
-                    rti_sample = {}
-                    for row in rows:
-                        json_data = json.loads(row[0])
-                        if "timestamp" in json_data:
-                            rti_sample[self.get_timestamp_from_json(json_data["timestamp"])] = json_data[item.data(999)["id"]]
+    def _remove_trace_by_item_name(self, item_name):
+        """Removes a trace by given item name"""
+        for ix, trace in enumerate(self.fig.data):
+            if trace.name == item_name:
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
+                self.qdask.update_graph(self.fig)
+                self.browser.reload()
+                break
 
-                    df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
-                    self.fig.add_trace(go.Scatter(x=df.index, y=df.iloc[:, 0], mode='lines', name=item.text()))
-                    self.qdask.update_graph(self.fig)
-                    self.browser.reload()
-                else:
-                    for ix, trace in enumerate(self.fig.data):
-                        if trace.name == item.text():
-                            self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
-                            self.qdask.update_graph(self.fig)
-                            self.browser.reload()
-                            break
+
+    def _handle_tdm_item_change(self, item):
+        """Handles changes for TDM items"""
+        y = pd.Series(self.tdms_file.channel(item.parent().data(999)["id"], 0))
+        y = y.apply(self.zeroEpoctimestamp_to_datetime)
+        data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
+        self._add_scatter_trace_to_fig(y, data, item.text())
+
+    def _handle_dat_item_change(self, item):
+        """Handles changes for DAT items"""
+        table = item.parent().data(999)["id"]
+        conn = sqlite3.connect(self.filename)
+        cur = conn.cursor()
+        cur.execute(f"SELECT rti_json_sample FROM '{table}';")
+        rows = cur.fetchall()
+        conn.close()
+        rti_sample = {
+            self.get_timestamp_from_json(json.loads(row[0])["timestamp"]): json.loads(row[0])[item.data(999)["id"]] for row
+            in rows if "timestamp" in json.loads(row[0])}
+        df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
+        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text())
+
+
+    def _add_scatter_trace_to_fig(self, x, y, text):
+        """Adds scatter trace to the fig"""
+        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text))
+        self.qdask.update_graph(self.fig)
+        self.browser.reload()
 
 
 def main():
