@@ -9,8 +9,14 @@ import plotly.graph_objects as go
 import pandas as pd
 import tdm_loader
 import pathlib
+from PySide6 import QtCore
+import plotly.graph_objects as go
+from plotly import subplots
 
-from signal_browser.qt_dash import DashThread
+from .qt_dash import DashThread
+
+
+# from signal_browser.qt_dash import DashThread
 
 class FileType(Enum):
     TDM = auto()
@@ -72,6 +78,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tdms_file = tdm_loader.OpenFile(filename)
         self._standard_model.clear()
         self.fig = go.Figure()
+        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
+        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
 
         root_node = self._standard_model.invisibleRootItem()
         for group in range(0, len(self.tdms_file)):
@@ -84,7 +92,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_dat_file(self, filename):
         self._standard_model.clear()
-        self.fig = go.Figure()
+        self.fig = subplots.make_subplots(rows=1, cols=1, specs=[[{"secondary_y": True}]])
+        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
+        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
+        self.fig.update_layout(
+            yaxis2=dict(
+                range=[-.1, 1.1],
+                overlaying='y',
+                side='right',
+                fixedrange=True
+            ),
+        )
+
         # Connect to the SQLite database
         conn = sqlite3.connect(filename)
         # Create a cursor object
@@ -281,7 +300,12 @@ class MainWindow(QtWidgets.QMainWindow):
         conn.close()
 
         rti_sample = {}
+        is_bolean = True
+
         for timestamp_json, data, timestamp_sql in rows:
+            if data not in [1, 0]:
+                is_bolean = False
+
 
             if timestamp_json is not None:
                 timestamp = self.get_timestamp_from_json(json.loads(timestamp_json))
@@ -297,12 +321,12 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 rti_sample[timestamp] = data
         df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
-        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text())
+        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text(), secondary_y=is_bolean)
 
 
-    def _add_scatter_trace_to_fig(self, x, y, text):
+    def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
         """Adds scatter trace to the fig"""
-        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text))
+        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text),row=1,col=1, secondary_y=secondary_y)
         self.qdask.update_graph(self.fig)
         self.browser.reload()
 
