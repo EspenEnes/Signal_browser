@@ -293,40 +293,64 @@ class MainWindow(QtWidgets.QMainWindow):
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
         item_name = item.data(999)["id"]
-
         table = item.parent().data(999)["id"]
-        conn = sqlite3.connect(self.filename)
-        cur = conn.cursor()
-        cur.execute(f"SELECT json_extract(rti_json_sample, '$.timestamp'),"
-                    f"       json_extract(rti_json_sample, '$.{item_name}'),"
-                    f"       SampleInfo_reception_timestamp "
-                    f"FROM '{table}';")
-        rows = cur.fetchall()
-        conn.close()
 
-        rti_sample = {}
-        is_bolean = True
-
-        for timestamp_json, data, timestamp_sql in rows:
-            if data not in [1, 0]:
-                is_bolean = False
+        query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
+        json_extract(rti_json_sample, '$.{item_name}'),
+        SampleInfo_reception_timestamp
+        FROM '{table}';"""
 
 
-            if timestamp_json is not None:
-                timestamp = self.get_timestamp_from_json(json.loads(timestamp_json))
+        with sqlite3.connect(self.filename) as dbcon:
+            df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
+            if not df[df.columns[0]].isna().all():
+                df["json_extract(rti_json_sample, '$.timestamp')"] = df["json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
+                df["json_extract(rti_json_sample, '$.timestamp')"] = df[
+                "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
+                df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
             else:
-                timestamp = self.get_timestamp_from_ns(timestamp_sql)
+                df.set_index("SampleInfo_reception_timestamp", inplace=True)
 
-            if type(data) == bool:
-                if data:
-                    boolean = 1
-                else:
-                    boolean = 0
-                rti_sample[timestamp] = boolean
-            else:
-                rti_sample[timestamp] = data
-        df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
-        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text(), secondary_y=is_bolean)
+
+
+
+
+
+
+        # conn = sqlite3.connect(self.filename)
+        # cur = conn.cursor()
+        # cur.execute(query)
+        # rows = cur.fetchall()
+        # conn.close()
+        #
+        # pd.DataFrame(rows)
+        #
+        #
+        #
+        # rti_sample = {}
+        # is_bolean = True
+        #
+        # for timestamp_json, data, timestamp_sql in rows:
+        #     if data not in [1, 0]:
+        #         is_bolean = False
+        #
+        #
+        #     if timestamp_json is not None:
+        #         timestamp = self.get_timestamp_from_json(json.loads(timestamp_json))
+        #     else:
+        #         timestamp = self.get_timestamp_from_ns(timestamp_sql)
+        #
+        #     if type(data) == bool:
+        #         if data:
+        #             boolean = 1
+        #         else:
+        #             boolean = 0
+        #         rti_sample[timestamp] = boolean
+        #     else:
+        #         rti_sample[timestamp] = data
+        # df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
+        # print(datetime.now() - start)
+        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text(), secondary_y=False)
 
 
     def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
