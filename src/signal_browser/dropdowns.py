@@ -197,6 +197,7 @@ class MainWindow(QtWidgets.QMainWindow):
         cur = conn.cursor()
         # Execute the SQL query
         cur.execute(f"SELECT rti_json_sample FROM '{table}';")
+
         # Fetch all rows from the executed SQL query
         row = cur.fetchone()
         # Close the connection
@@ -267,29 +268,36 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
+        item_name = item.data(999)["id"]
+
+        pd.read_sql_query()
+
         table = item.parent().data(999)["id"]
         conn = sqlite3.connect(self.filename)
         cur = conn.cursor()
-        cur.execute(f"SELECT rti_json_sample, SampleInfo_reception_timestamp FROM '{table}';")
+        cur.execute(f"SELECT json_extract(rti_json_sample, '$.timestamp'),"
+                    f"       json_extract(rti_json_sample, '$.{item_name}'),"
+                    f"       SampleInfo_reception_timestamp "
+                    f"FROM '{table}';")
         rows = cur.fetchall()
         conn.close()
 
         rti_sample = {}
-        for data, table_timestamp in rows:
-            json_data = json.loads(data)
-            if "timestamp" in json_data:
-                timestamp = self.get_timestamp_from_json(json_data["timestamp"])
-            else:
-                timestamp = self.get_timestamp_from_ns(table_timestamp)
+        for timestamp_json, data, timestamp_sql in rows:
 
-            if type(json_data[item.data(999)["id"]]) == bool:
-                if json_data[item.data(999)["id"]]:
+            if timestamp_json is not None:
+                timestamp = self.get_timestamp_from_json(json.loads(timestamp_json))
+            else:
+                timestamp = self.get_timestamp_from_ns(timestamp_sql)
+
+            if type(data) == bool:
+                if data:
                     boolean = 1
                 else:
                     boolean = 0
                 rti_sample[timestamp] = boolean
             else:
-                rti_sample[timestamp] = json_data[item.data(999)["id"]]
+                rti_sample[timestamp] = data
         df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
         self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text())
 
