@@ -100,7 +100,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 range=[-.1, 1.1],
                 overlaying='y',
                 side='right',
-                fixedrange=True
+                fixedrange=True,
+                showgrid=False,
+                minor_showgrid=False,
+                tickvals=[0,1],
+                ticktext=["False", "True"]
             ),
         )
 
