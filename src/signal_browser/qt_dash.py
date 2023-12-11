@@ -12,8 +12,8 @@ class DashThread(QtCore.QThread):
         self._app = dash.Dash()
         self._app.layout = dash.html.Div()
         fig = go.Figure()
-        fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray',  minor_griddash="dot")
-        fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray', minor_griddash="dot")
+        fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray',  minor_griddash="dot")
+        fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray', minor_griddash="dot")
         self.update_graph(fig)
 
     def update_graph(self, fig):

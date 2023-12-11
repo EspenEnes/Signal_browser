@@ -78,8 +78,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tdms_file = tdm_loader.OpenFile(filename)
         self._standard_model.clear()
         self.fig = go.Figure()
-        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
-        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
+        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
+        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
 
         root_node = self._standard_model.invisibleRootItem()
         for group in range(0, len(self.tdms_file)):
@@ -93,8 +93,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_dat_file(self, filename):
         self._standard_model.clear()
         self.fig = subplots.make_subplots(rows=1, cols=1, specs=[[{"secondary_y": True}]])
-        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
-        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='gray')
+        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
+        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
         self.fig.update_layout(
             yaxis2=dict(
                 range=[-.1, 1.1],
