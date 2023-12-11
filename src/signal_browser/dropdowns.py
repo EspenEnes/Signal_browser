@@ -118,17 +118,18 @@ class MainWindow(QtWidgets.QMainWindow):
         root_node = self._standard_model.invisibleRootItem()
         for table in [row[0] for row in rows]:
             cur.execute(f"PRAGMA table_info('{table}')")
-            rows = cur.fetchall()
-            if len(rows) > 0:
-                if "rti_json_sample" in [row[1] for row in rows]:
-                    cur.execute(f"SELECT rti_json_sample FROM '{table}';")
-                    rows = cur.fetchall()
-                    if len(rows) > 0:
-                        group_node = QtGui.QStandardItem(
+            columns = cur.fetchall()
+            if columns and len(columns) > 0:
+                for column in columns:
+                    if "rti_json_sample" in column[1]:
+                        cur.execute(f"SELECT json_extract(rti_json_sample, '$') FROM '{table}';")
+                        channels = cur.fetchone()
+                        if channels and len(channels) > 0:
+                            group_node = QtGui.QStandardItem(
                             f"{table}")
-                        group_node.setEditable(False)
-                        group_node.setData(dict(id=table, node="root"), 999)
-                        root_node.appendRow(group_node)
+                            group_node.setEditable(False)
+                            group_node.setData(dict(id=table, node="root"), 999)
+                            root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
 
