@@ -270,8 +270,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """Handles changes for DAT items"""
         item_name = item.data(999)["id"]
 
-        pd.read_sql_query()
-
         table = item.parent().data(999)["id"]
         conn = sqlite3.connect(self.filename)
         cur = conn.cursor()
