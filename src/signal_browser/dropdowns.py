@@ -312,6 +312,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 df.set_index("SampleInfo_reception_timestamp", inplace=True)
 
 
+            if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([False, True]).all():
+                is_boolean = True
+            elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([True]).all():
+                is_boolean = True
+            elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
+                is_boolean = True
+            else:
+                is_boolean = False
+
+
 
 
 
@@ -350,7 +360,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #         rti_sample[timestamp] = data
         # df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
         # print(datetime.now() - start)
-        self._add_scatter_trace_to_fig(df.index, df.iloc[:, 0], item.text(), secondary_y=False)
+        self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
 
 
     def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
