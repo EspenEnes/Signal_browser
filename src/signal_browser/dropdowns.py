@@ -310,73 +310,37 @@ class MainWindow(QtWidgets.QMainWindow):
         json_extract(rti_json_sample, '$.{item_name}'),
         SampleInfo_reception_timestamp
         FROM '{table}';"""
+        new_list = []
+        for filename in self.filenames:
+            if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
+                with sqlite3.connect(filename) as dbcon:
+                    df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
+                    if not df[df.columns[0]].isna().all():
+                        df["json_extract(rti_json_sample, '$.timestamp')"] = df[
+                            "json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
+                        df["json_extract(rti_json_sample, '$.timestamp')"] = df[
+                            "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
 
-        conn = sqlite3.connect(self.filenames[0])  # Create a database connection to the base database.
-        cursor = conn.cursor()
+                new_list.append(df)
+        df = pd.concat(new_list)
 
-        query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
-            json_extract(rti_json_sample, '$.{item_name}'),
-            SampleInfo_reception_timestamp
-            FROM '{table}'
-            UNION ALL
-            """
-
-        for i, db in enumerate(self.filenames[1:]):
-            cursor.execute(f"ATTACH DATABASE '{db}' as db{i};")  # Attach the other databases.
-            cursor.execute("BEGIN")
-
-            query += f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
-            json_extract(rti_json_sample, '$.{item_name}'),
-            SampleInfo_reception_timestamp
-            FROM db{i}.'{table}'
-            UNION ALL
-            """
-
-        query = query.rstrip("UNION ALL\n")  # Remove the last UNION ALL from your query.
-
-        # df = pd.read_sql_query(query, conn, parse_dates={"SampleInfo_reception_timestamp": "ns"})
-        cursor.execute(query)  # Execute the desired SQL query across all attached databases.
-        rows = cursor.fetchall()  # Fetch the results.
-        df = pd.DataFrame(rows, columns=["timestamp", f"{item_name}", "SampleInfo_reception_timestamp"])
-
-        if not df["timestamp"].isna().all():
-            df["timestamp"] = df["timestamp"].apply(self.get_timestamp_from_json)
-            # df.set_index("timestamp", inplace=True)
+        if not df[df.columns[0]].isna().all():
+            df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
         else:
-            df["timestamp"] = df["SampleInfo_reception_timestamp"].apply(self.get_timestamp_from_ns)
-            # df.set_index("SampleInfo_reception_timestamp", inplace=True)
+            df.set_index("SampleInfo_reception_timestamp", inplace=True)
 
-
-
-
-        # for filename in self.filenames:
-        #     if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
-        #         with sqlite3.connect(filename) as dbcon:
-        #             df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
-        #
-        #             if df["json_extract(rti_json_sample, '$.timestamp')"].isna().all():
-        #                 df["json_extract(rti_json_sample, '$.timestamp')"] = df[
-        #                     "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
-        #                 df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
-        #             else:
-        #                 df.set_index("SampleInfo_reception_timestamp", inplace=True)
-        #         new_list.append(df)
-        #
-        #         df = pd.concat(new_list)
-        #
-        #
-        if df[f"{item_name}"].isin([0, 1]).all():
+        if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0, 1]).all():
             is_boolean = True
-        elif df[f"{item_name}"].isin([1]).all():
+        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([1]).all():
             is_boolean = True
-        elif df[f"{item_name}"].isin([0]).all():
+        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
             is_boolean = True
         else:
             is_boolean = False
-        # df.sort_index(inplace=True)
+        df.sort_index(inplace=True)
 
-        self._add_scatter_trace_to_fig(df["timestamp"], df[f"{item_name}"], item.text(), secondary_y=is_boolean)
-
+        self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(),
+                                       secondary_y=is_boolean)
 
     def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
         """Adds scatter trace to the fig"""
