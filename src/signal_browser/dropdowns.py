@@ -313,7 +313,7 @@ class MainWindow(QtWidgets.QMainWindow):
         is_boolean = False
         for filename in self.filenames:
             if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
-                with sqlite3.connect(self.filename) as dbcon:
+                with sqlite3.connect(filename) as dbcon:
                     df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
                     if not df[df.columns[0]].isna().all():
                         df["json_extract(rti_json_sample, '$.timestamp')"] = df[
