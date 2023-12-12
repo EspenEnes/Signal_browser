@@ -178,9 +178,11 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         group = index.data(999)["id"]
         group_node = self._tree_view.model().itemFromIndex(index)
+        group_node.setEditable(False)
         channels = self.get_channels_from_tdm(group)
         for ix, name in channels:
             channel_node = self.create_channel_item(name, ix)
+
             group_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -192,6 +194,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
         table = index.data(999)["id"]
         group_node = self._tree_view.model().itemFromIndex(index)
+        group_node.setEditable(False)
         channels = self.get_channels_from_rti_json_sample(table)
         for key, value in channels.items():
             name = key
@@ -205,6 +208,7 @@ class MainWindow(QtWidgets.QMainWindow):
         channel_node = QtGui.QStandardItem(name)
         channel_node.setData(dict(id=idx, node="leaf"), 999)
         channel_node.setCheckable(True)
+        channel_node.setEditable(False)
         if data_type in [int, float, bool]:
             channel_node.setEnabled(True)
         elif data_type is not None:
@@ -321,45 +325,6 @@ class MainWindow(QtWidgets.QMainWindow):
             else:
                 is_boolean = False
 
-
-
-
-
-
-
-        # conn = sqlite3.connect(self.filename)
-        # cur = conn.cursor()
-        # cur.execute(query)
-        # rows = cur.fetchall()
-        # conn.close()
-        #
-        # pd.DataFrame(rows)
-        #
-        #
-        #
-        # rti_sample = {}
-        # is_bolean = True
-        #
-        # for timestamp_json, data, timestamp_sql in rows:
-        #     if data not in [1, 0]:
-        #         is_bolean = False
-        #
-        #
-        #     if timestamp_json is not None:
-        #         timestamp = self.get_timestamp_from_json(json.loads(timestamp_json))
-        #     else:
-        #         timestamp = self.get_timestamp_from_ns(timestamp_sql)
-        #
-        #     if type(data) == bool:
-        #         if data:
-        #             boolean = 1
-        #         else:
-        #             boolean = 0
-        #         rti_sample[timestamp] = boolean
-        #     else:
-        #         rti_sample[timestamp] = data
-        # df = pd.DataFrame.from_dict(rti_sample, orient="index", columns=[item.text()])
-        # print(datetime.now() - start)
         self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
 
 
