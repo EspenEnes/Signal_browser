@@ -308,9 +308,7 @@ class MainWindow(QtWidgets.QMainWindow):
         json_extract(rti_json_sample, '$.{item_name}'),
         SampleInfo_reception_timestamp
         FROM '{table}';"""
-        new = pd.DataFrame()
-
-        is_boolean = False
+        new_list = []
         for filename in self.filenames:
             if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
                 with sqlite3.connect(filename) as dbcon:
@@ -320,26 +318,29 @@ class MainWindow(QtWidgets.QMainWindow):
                             "json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
                         df["json_extract(rti_json_sample, '$.timestamp')"] = df[
                             "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
-                        df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
-                    else:
-                        df.set_index("SampleInfo_reception_timestamp", inplace=True)
-
-                    if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([False, True]).all():
-                        is_boolean = True
-                    elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([True]).all():
-                        is_boolean = True
-                    elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
-                        is_boolean = True
-                    else:
-                        is_boolean = False
-
-                    new = pd.concat([new, df])
-        new.sort_index(inplace=True)
 
 
 
 
-        self._add_scatter_trace_to_fig(new.index, new[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
+                new_list.append(df)
+        df = pd.concat(new_list)
+
+        if not df[df.columns[0]].isna().all():
+            df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
+        else:
+            df.set_index("SampleInfo_reception_timestamp", inplace=True)
+
+        if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0, 1]).all():
+            is_boolean = True
+        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([1]).all():
+            is_boolean = True
+        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
+            is_boolean = True
+        else:
+            is_boolean = False
+        df.sort_index(inplace=True)
+
+        self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
 
 
     def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
