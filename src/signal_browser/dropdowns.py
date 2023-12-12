@@ -145,7 +145,8 @@ class MainWindow(QtWidgets.QMainWindow):
         """Opens a file and adds the groups to the tree view"""
 
         self.file_type = FileType.NONE
-        self.filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", "", "TDM (*.tdm *.dat *.db)")
+        self.filenames, _ = QtWidgets.QFileDialog.getOpenFileNames(self, "Open File", "", "TDM (*.tdm *.dat *.db)",)
+        self.filename = self.filenames[0]
 
         self.fig = go.Figure()
         self.qdask.update_graph(self.fig)
@@ -307,29 +308,38 @@ class MainWindow(QtWidgets.QMainWindow):
         json_extract(rti_json_sample, '$.{item_name}'),
         SampleInfo_reception_timestamp
         FROM '{table}';"""
+        new = pd.DataFrame()
+
+        is_boolean = False
+        for filename in self.filenames:
+            if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
+                with sqlite3.connect(self.filename) as dbcon:
+                    df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
+                    if not df[df.columns[0]].isna().all():
+                        df["json_extract(rti_json_sample, '$.timestamp')"] = df[
+                            "json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
+                        df["json_extract(rti_json_sample, '$.timestamp')"] = df[
+                            "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
+                        df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
+                    else:
+                        df.set_index("SampleInfo_reception_timestamp", inplace=True)
+
+                    if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([False, True]).all():
+                        is_boolean = True
+                    elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([True]).all():
+                        is_boolean = True
+                    elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
+                        is_boolean = True
+                    else:
+                        is_boolean = False
+
+                    new = pd.concat([new, df])
+        new.sort_index(inplace=True)
 
 
-        with sqlite3.connect(self.filename) as dbcon:
-            df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
-            if not df[df.columns[0]].isna().all():
-                df["json_extract(rti_json_sample, '$.timestamp')"] = df["json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
-                df["json_extract(rti_json_sample, '$.timestamp')"] = df[
-                "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
-                df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
-            else:
-                df.set_index("SampleInfo_reception_timestamp", inplace=True)
 
 
-            if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([False, True]).all():
-                is_boolean = True
-            elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([True]).all():
-                is_boolean = True
-            elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
-                is_boolean = True
-            else:
-                is_boolean = False
-
-        self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
+        self._add_scatter_trace_to_fig(new.index, new[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(), secondary_y=is_boolean)
 
 
     def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
