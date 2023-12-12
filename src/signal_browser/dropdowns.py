@@ -145,8 +145,12 @@ class MainWindow(QtWidgets.QMainWindow):
         """Opens a file and adds the groups to the tree view"""
 
         self.file_type = FileType.NONE
-
         self.filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", "", "TDM (*.tdm *.dat *.db)")
+
+        self.fig = go.Figure()
+        self.qdask.update_graph(self.fig)
+        self.browser.reload()
+
         match pathlib.Path(self.filename).suffix.lower():
             case ".tdm" :
                 self.load_tdm_file(self.filename)
