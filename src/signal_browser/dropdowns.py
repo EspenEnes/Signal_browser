@@ -11,6 +11,7 @@ import tdm_loader
 import pathlib
 from PySide6 import QtCore
 import plotly.graph_objects as go
+from PySide6.QtGui import QStandardItem
 from plotly import subplots
 
 from .qt_dash import DashThread
@@ -47,10 +48,44 @@ class MainWindow(QtWidgets.QMainWindow):
         self.create_layout()
         self.create_menubar()
 
+        self._tree_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+
+
+    def open_menu(self, position):
+        # Get the index of the item at the position where right-click was performed
+        index = self._tree_view.indexAt(position)
+        if not index.isValid():
+            return
+
+        # Check if the item is a channel
+        if index.data(999)["node"] != "leaf":
+            # It's a root item, not a child item
+            return
+
+        item = self._tree_view.model().itemFromIndex(index)
+
+        menu = QtWidgets.QMenu()
+        action1 = menu.addAction("Select and add to secondary axis")
+        action1.triggered.connect(lambda: self.on_secondary_axis_check(item))
+
+        # Show the context menu
+        menu.exec_(self._tree_view.viewport().mapToGlobal(position))
+
+    def on_secondary_axis_check(self, item: QStandardItem):
+        data = item.data(999)
+        data["secondary_y"] = True
+
+        item.model().blockSignals(True)
+        item.setData(data, 999)
+        item.model().blockSignals(False)
+
+        item.setCheckState(QtCore.Qt.CheckState.Checked)
+
     def connect_signals(self):
         """Connects the signals to the slots"""
         self._tree_view.doubleClicked.connect(self.on_double_clicked)
         self._standard_model.itemChanged.connect(self.on_channel_check)
+        self._tree_view.customContextMenuRequested.connect(self.open_menu)
 
     def create_layout(self):
         """Creates the layout for the main window"""
@@ -86,7 +121,7 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node = QtGui.QStandardItem(
                 f"{self.tdms_file.channel_group_name(group)} - [{self.tdms_file.no_channels(group)}]")
             group_node.setEditable(False)
-            group_node.setData(dict(id=group, node="root"), 999)
+            group_node.setData(dict(id=group, node="root", secondary_y=False), 999)
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -95,18 +130,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.fig = subplots.make_subplots(rows=1, cols=1, specs=[[{"secondary_y": True}]])
         self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
         self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
-        self.fig.update_layout(
-            yaxis2=dict(
-                range=[-.1, 1.1],
-                overlaying='y',
-                side='right',
-                fixedrange=True,
-                showgrid=False,
-                minor_showgrid=False,
-                tickvals=[0,1],
-                ticktext=["False", "True"]
-            ),
-        )
 
         # Connect to the SQLite database
         conn = sqlite3.connect(filename)
@@ -132,7 +155,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             group_node = QtGui.QStandardItem(
                             f"{table}")
                             group_node.setEditable(False)
-                            group_node.setData(dict(id=table, node="root"), 999)
+                            group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
                             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -211,7 +234,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
-        channel_node.setData(dict(id=idx, node="leaf"), 999)
+        channel_node.setData(dict(id=idx, node="leaf", secondary_y=False), 999)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
         if data_type in [int, float, bool]:
@@ -340,11 +363,49 @@ class MainWindow(QtWidgets.QMainWindow):
         df.sort_index(inplace=True)
 
         self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(),
-                                       secondary_y=is_boolean)
+                                       is_boolean=is_boolean, secondary_y=item.data(999)["secondary_y"])
 
-    def _add_scatter_trace_to_fig(self, x, y, text, secondary_y=False):
+
+
+        item.model().blockSignals(True)
+        data = item.data(999)
+        data["secondary_y"] = False
+        item.setData(data, 999)
+        item.model().blockSignals(False)
+
+    def _add_scatter_trace_to_fig(self, x, y, text, is_boolean=False, secondary_y=False):
         """Adds scatter trace to the fig"""
-        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text),row=1,col=1, secondary_y=secondary_y)
+        if len(self.fig.data) == 0 and not is_boolean and not secondary_y:
+            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text), row=1, col=1)
+
+        elif secondary_y:
+            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text, yaxis="y3"), row=1, col=1)
+            self.fig.data[-1].update(yaxis="y3")
+            self.fig.update_layout(
+                yaxis3=dict(
+                    side='right',
+                    overlaying='y',
+                    showgrid=False,
+                    minor_showgrid=False,
+                ))
+
+        elif is_boolean:
+            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text, yaxis="y2"), row=1, col=1)
+            self.fig.data[-1].update(yaxis="y2")
+            self.fig.update_layout(
+                yaxis2=dict(
+                    range=[-.1, 1.1],
+                    overlaying='y',
+                    side='left',
+                    fixedrange=True,
+                    showgrid=False,
+                    minor_showgrid=False,
+                    showticklabels=False,))
+
+        else:
+            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text), row=1, col=1)
+
+
         self.qdask.update_graph(self.fig)
         self.browser.reload()
 
