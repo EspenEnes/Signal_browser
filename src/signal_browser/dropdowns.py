@@ -332,7 +332,7 @@ class MainWindow(QtWidgets.QMainWindow):
         query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
         json_extract(rti_json_sample, '$.{item_name}'),
         SampleInfo_reception_timestamp
-        FROM '{table}';"""
+        FROM '{table}' WHERE json_extract(rti_json_sample, '$.{item_name}') IS NOT NULL;"""
         new_list = []
         for filename in self.filenames:
             if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
@@ -357,6 +357,8 @@ class MainWindow(QtWidgets.QMainWindow):
         elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([1]).all():
             is_boolean = True
         elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
+            is_boolean = True
+        elif item_name == "novosControl":
             is_boolean = True
         else:
             is_boolean = False
