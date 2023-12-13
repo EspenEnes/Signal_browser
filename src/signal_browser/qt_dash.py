@@ -12,6 +12,7 @@ class DashThread(QtCore.QThread):
         self._app = dash.Dash()
         self._app.layout = dash.html.Div()
         fig = go.Figure()
+
         fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray',  minor_griddash="dot")
         fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray', minor_griddash="dot")
         self.update_graph(fig)
@@ -25,7 +26,8 @@ class DashThread(QtCore.QThread):
                 figure={
                     'data': fig.data,
                     'layout': fig.layout
-                },  style={'height': '100vh'}),
+                },  style={'height': '100vh'},
+            config={"scrollZoom": True}),
         ], style={'height': '100vh'})
 
     @staticmethod
