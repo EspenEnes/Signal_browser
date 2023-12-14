@@ -16,6 +16,11 @@
 pip install git+https://github.com/EspenEnes/Signal_browser.git
 ```
 
+## execute from cmd
+```console
+..signal_browser
+```
+
 ## License
 
 `signal-browser` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
