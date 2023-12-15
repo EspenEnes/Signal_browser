@@ -234,10 +234,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
-        channel_node.setData(dict(id=idx, node="leaf", secondary_y=False), 999)
+        channel_node.setData(dict(id=idx, node="leaf", secondary_y=False, data_type=data_type), 999)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
-        if data_type in [int, float, bool]:
+        if data_type in [int, float, bool, str]:
             channel_node.setEnabled(True)
         elif data_type is not None:
             channel_node.setEnabled(False)
@@ -299,7 +299,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         if item.checkState() != QtCore.Qt.CheckState.Checked:
-            return self._remove_trace_by_item_name(item.text())
+            return self._remove_trace_by_item_name(item)
 
         if self.file_type == FileType.TDM:
             self._get_tdm_channel_data(item)
@@ -307,14 +307,26 @@ class MainWindow(QtWidgets.QMainWindow):
             self._get_dat_channel_data(item)
 
 
-    def _remove_trace_by_item_name(self, item_name):
+    def _remove_trace_by_item_name(self, item):
         """Removes a trace by given item name"""
         for ix, trace in enumerate(self.fig.data):
-            if trace.name == item_name:
+            if trace.name == item.text():
                 self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 break
+
+        item_name = item.data(999)["id"]
+        table = item.parent().data(999)["id"]
+        for ix, trace in enumerate(self.fig.data):
+            print(trace.name, f"{table} {item_name}")
+            if trace.name == f"{table}-{item_name}":
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
+                self.qdask.update_graph(self.fig)
+                self.browser.reload()
+                break
+
+
 
 
     def _get_tdm_channel_data(self, item):
@@ -328,6 +340,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Handles changes for DAT items"""
         item_name = item.data(999)["id"]
         table = item.parent().data(999)["id"]
+        data_type = item.data(999)["data_type"]
 
         query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
         json_extract(rti_json_sample, '$.{item_name}'),
@@ -364,6 +377,24 @@ class MainWindow(QtWidgets.QMainWindow):
             is_boolean = False
         df.sort_index(inplace=True)
 
+
+        #todo refactor this
+        if data_type == str:
+            self.fig.add_trace(
+                go.Scatter(x=df.index, y=[f"{table}-{item_name}" for x in df.iterrows()], hovertext=[x[1][0] for x in df.iterrows()],
+                           mode="markers", name=f"{table}-{item_name}"))
+            self.fig.data[-1].update(yaxis="y4")
+            self.fig.update_layout(
+                yaxis4=dict(
+                    side='right',
+                    overlaying='y',
+                    showgrid=False,
+                    minor_showgrid=False,
+                ))
+            self.qdask.update_graph(self.fig)
+            self.browser.reload()
+            return
+
         self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(),
                                        is_boolean=is_boolean, secondary_y=item.data(999)["secondary_y"])
 
@@ -374,6 +405,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data["secondary_y"] = False
         item.setData(data, 999)
         item.model().blockSignals(False)
+
 
     def _add_scatter_trace_to_fig(self, x, y, text, is_boolean=False, secondary_y=False):
         """Adds scatter trace to the fig"""
