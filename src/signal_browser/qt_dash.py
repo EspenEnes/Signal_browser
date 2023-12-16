@@ -44,3 +44,6 @@ class DashThread(QtCore.QThread):
     def run(self):
         """Runs the app"""
         self._app.run_server()
+
+    def stop(self):
+        self.terminate()

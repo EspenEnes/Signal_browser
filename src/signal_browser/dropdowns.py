@@ -4,6 +4,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from enum import Enum, auto
 
+import plotly.express as px
+
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
 import plotly.graph_objects as go
 import pandas as pd
@@ -102,12 +104,27 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menuFile = QtWidgets.QMenu(self.menubar, title="File")
 
         self.actionOpenFile = QtGui.QAction(self, text="Open")
+        self.actionShowNovosProcess = QtGui.QAction(self, text="Show Novos Process")
+        self.actionShowSignalBrowser = QtGui.QAction(self, text="Show Signal Browser")
 
         self.menuFile.addAction(self.actionOpenFile)
+        self.menuFile.addAction(self.actionShowSignalBrowser)
+        self.menuFile.addAction(self.actionShowNovosProcess)
 
         self.menubar.addAction(self.menuFile.menuAction())
         self.setMenuBar(self.menubar)
         self.actionOpenFile.triggered.connect(self.on_actionOpenFile_triggered)
+        self.actionShowNovosProcess.triggered.connect(self.get_processPhase)
+        self.actionShowSignalBrowser.triggered.connect(self.show_signal_browser)
+
+        self.actionShowNovosProcess.setEnabled(False)
+        self.actionShowSignalBrowser.setEnabled(False)
+
+
+    def show_signal_browser(self):
+        self.qdask.update_graph(self.fig)
+        self.browser.reload()
+        self.actionShowNovosProcess.setEnabled(True)
 
     def load_tdm_file(self, filename):
         self.tdms_file = tdm_loader.OpenFile(filename)
@@ -124,6 +141,8 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node.setData(dict(id=group, node="root", secondary_y=False), 999)
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
+
+        self.actionShowNovosProcess.setEnabled(False)
 
     def load_dat_file(self, filename):
         self._standard_model.clear()
@@ -162,6 +181,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         conn.close()
 
+        self.actionShowNovosProcess.setEnabled(True)
+
 
 
     def on_actionOpenFile_triggered(self):
@@ -176,7 +197,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.browser.reload()
 
         match pathlib.Path(self.filename).suffix.lower():
-            case ".tdm" :
+            case ".tdm":
                 self.load_tdm_file(self.filename)
                 self.file_type = FileType.TDM
             case ".dat" | ".db":
@@ -314,6 +335,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
+                self.actionShowSignalBrowser.setEnabled(False)
                 break
 
         item_name = item.data(999)["id"]
@@ -324,6 +346,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
+                self.actionShowSignalBrowser.setEnabled(False)
                 break
 
 
@@ -335,6 +358,77 @@ class MainWindow(QtWidgets.QMainWindow):
         y = y.apply(self.zeroEpoctimestamp_to_datetime)
         data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
         self._add_scatter_trace_to_fig(y, data, item.text())
+
+    def process_df_rows_to_processes(self, df):
+        processes = {}
+        for row in df.itertuples():
+            timestamp = row[1]
+            phase = row[2]
+            subphase = row[3]
+            processes.setdefault(phase, {}).setdefault(subphase, []).append(timestamp)
+        return processes
+
+    def process_data_to_gannt(self, processes):
+        gannt = []
+        for process in processes:
+            start, end = None, None
+            for subprocess, timestamp in processes[process].items():
+                if not subprocess.endswith("End"):
+                    gannt.append(dict(Task=process, Start=timestamp[0], Finish=timestamp[0] + timedelta(seconds=.2),
+                                      custom=[1, 1], Resource=subprocess))
+                if subprocess.endswith("End"):
+                    end = timestamp[0]
+                    start = end - timedelta(seconds=1) if start is None else start
+                else:
+                    start = timestamp[0]
+                if start and end:
+                    gannt.append(dict(Task=process, Start=start, Finish=end, Resource=process, custom=[.25, .25]))
+                    start = None
+                    end = None
+
+            if start and not end:
+                end = processes[process][subprocess][-1] + timedelta(seconds=.2)
+                gannt.append(dict(Task=process, Start=start, Finish=end, Resource=process, custom=[.25, .25]))
+
+        return gannt
+
+    def process_db_query_to_df(self, filename, query):
+        with sqlite3.connect(filename) as dbcon:
+            df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
+            timestamp_column = "json_extract(rti_json_sample, '$.timestamp')"
+            df[timestamp_column] = df[timestamp_column].apply(json.loads)
+            df[timestamp_column] = df[timestamp_column].apply(self.get_timestamp_from_json)
+        return df
+
+    def get_processPhase(self):
+        query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
+        json_extract(rti_json_sample, '$.phase'),
+        json_extract(rti_json_sample, '$.subPhase'),
+        SampleInfo_reception_timestamp
+        FROM 'ProcessPhase@0' WHERE json_extract(rti_json_sample, '$.timestamp') IS NOT NULL;"""
+
+        list_df = [self.process_db_query_to_df(filename, query) for filename in self.filenames]
+        df = pd.concat(list_df)
+        processes = self.process_df_rows_to_processes(df)
+        gannt = self.process_data_to_gannt(processes)
+
+        if not gannt:
+            return
+
+        fig = px.timeline(gannt, x_start="Start", x_end="Finish", y="Task", color="Resource", custom_data="custom")
+        for bar in fig.data:
+            bar.width = bar.customdata[0][0][0]
+            if bar.customdata[0][0][1] == 1:
+                bar.showlegend = False
+        self.fig2 = fig
+
+        self.qdask.update_graph(self.fig2)
+        self.browser.reload()
+
+        self.actionShowNovosProcess.setEnabled(False)
+        self.actionShowSignalBrowser.setEnabled(True)
+
+
 
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
@@ -393,6 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 ))
             self.qdask.update_graph(self.fig)
             self.browser.reload()
+            self.actionShowSignalBrowser.setEnabled(False)
             return
 
         self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(),
@@ -442,6 +537,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.qdask.update_graph(self.fig)
         self.browser.reload()
+        self.actionShowSignalBrowser.setEnabled(False)
 
 
 def main():
@@ -451,6 +547,7 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow()
     window.show()
+    app.aboutToQuit.connect(window.qdask.stop)
     sys.exit(app.exec())
 
 if __name__ == '__main__':
