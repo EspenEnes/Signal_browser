@@ -32,7 +32,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def init_ui_elements_and_vars(self):
         """Initializes the main window and UI elements"""
         self.file_type = FileType.NONE
-        self.file_type = FileType.NONE
         self.setWindowTitle("Signal Viewer")
         self.central_widget = QtWidgets.QWidget()
         self._standard_model = QtGui.QStandardItemModel(self)
@@ -116,7 +115,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_tdm_file(self, filename):
         self.tdms_file = tdm_loader.OpenFile(filename)
         self._standard_model.clear()
-        self.fig = go.Figure()
+        self.fig = subplots.make_subplots(rows=1, cols=1)
         self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
         self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
 
