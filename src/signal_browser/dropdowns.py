@@ -1,25 +1,16 @@
 import json
-import math
 import sqlite3
-from datetime import datetime, timedelta
 from enum import Enum, auto
-
-import plotly.express as px
-
+from .utils import TimeConversionUtils
+from .novos_processes import NOVOSProcesses
+from .qt_dash import DashThread
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
-import plotly.graph_objects as go
 import pandas as pd
 import tdm_loader
 import pathlib
-from PySide6 import QtCore
 import plotly.graph_objects as go
-from PySide6.QtGui import QStandardItem
 from plotly import subplots
 
-from .qt_dash import DashThread
-
-
-# from signal_browser.qt_dash import DashThread
 
 class FileType(Enum):
     TDM = auto()
@@ -28,74 +19,36 @@ class FileType(Enum):
     NONE = auto()
 
 
-
 class MainWindow(QtWidgets.QMainWindow):
+    DASH_URL = "http://127.0.0.1:8050"
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        DASH_URL = "http://127.0.0.1:8050"
-        self.file_type = FileType.NONE
-        self.setWindowTitle("Signal Viewer")
-
-        self.central_widget = QtWidgets.QWidget()
-        self._standard_model = QtGui.QStandardItemModel(self)
-        self._tree_view = QtWidgets.QTreeView(self)
-        self._tree_view.setModel(self._standard_model)
-
-        self.qdask = DashThread()
-        self.browser = QtWebEngineWidgets.QWebEngineView(self)
-        self.browser.load(QtCore.QUrl(DASH_URL))
-        self.qdask.start()
-
+        self.init_ui_elements_and_vars()
         self.connect_signals()
         self.create_layout()
         self.create_menubar()
 
+    def init_ui_elements_and_vars(self):
+        """Initializes the main window and UI elements"""
+        self.file_type = FileType.NONE
+        self.file_type = FileType.NONE
+        self.setWindowTitle("Signal Viewer")
+        self.central_widget = QtWidgets.QWidget()
+        self._standard_model = QtGui.QStandardItemModel(self)
+        self._tree_view = QtWidgets.QTreeView(self)
+        self._tree_view.setModel(self._standard_model)
+        self.qdask = DashThread()
+        self.browser = QtWebEngineWidgets.QWebEngineView(self)
+        self.browser.load(QtCore.QUrl(self.DASH_URL))
+        self.qdask.start()
         self._tree_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-
-
-    def open_menu(self, position):
-        # Get the index of the item at the position where right-click was performed
-        index = self._tree_view.indexAt(position)
-        if not index.isValid():
-            return
-
-        # Check if the item is a channel
-        if index.data(999)["node"] != "leaf":
-            # It's a root item, not a child item
-            return
-
-        item = self._tree_view.model().itemFromIndex(index)
-
-        menu = QtWidgets.QMenu()
-        action1 = menu.addAction("Select and add to secondary axis")
-        action1.triggered.connect(lambda: self.on_secondary_axis_check(item))
-
-        # Show the context menu
-        menu.exec_(self._tree_view.viewport().mapToGlobal(position))
-
-    def on_secondary_axis_check(self, item: QStandardItem):
-        data = item.data(999)
-        data["secondary_y"] = True
-
-        item.model().blockSignals(True)
-        item.setData(data, 999)
-        item.model().blockSignals(False)
-
-        item.setCheckState(QtCore.Qt.CheckState.Checked)
 
     def connect_signals(self):
         """Connects the signals to the slots"""
         self._tree_view.doubleClicked.connect(self.on_double_clicked)
         self._standard_model.itemChanged.connect(self.on_channel_check)
         self._tree_view.customContextMenuRequested.connect(self.open_menu)
-
-    def create_layout(self):
-        """Creates the layout for the main window"""
-        self.Hlayout = QtWidgets.QHBoxLayout()
-        self.Hlayout.addWidget(self._tree_view)
-        self.Hlayout.addWidget(self.browser, 10)
-        self.central_widget.setLayout(self.Hlayout)
-        self.setCentralWidget(self.central_widget)
 
     def create_menubar(self):
         """Creates the menu bar and adds the open file action"""
@@ -105,11 +58,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.actionOpenFile = QtGui.QAction(self, text="Open")
         self.actionShowNovosProcess = QtGui.QAction(self, text="Show Novos Process")
+        self.actionShowMMCProcess = QtGui.QAction(self, text="Show MMC Process")
         self.actionShowSignalBrowser = QtGui.QAction(self, text="Show Signal Browser")
 
         self.menuFile.addAction(self.actionOpenFile)
         self.menuFile.addAction(self.actionShowSignalBrowser)
         self.menuFile.addAction(self.actionShowNovosProcess)
+        self.menuFile.addAction(self.actionShowMMCProcess)
 
         self.menubar.addAction(self.menuFile.menuAction())
         self.setMenuBar(self.menubar)
@@ -119,12 +74,44 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.actionShowNovosProcess.setEnabled(False)
         self.actionShowSignalBrowser.setEnabled(False)
-
+        self.actionShowMMCProcess.setEnabled(False)
 
     def show_signal_browser(self):
         self.qdask.update_graph(self.fig)
         self.browser.reload()
         self.actionShowNovosProcess.setEnabled(True)
+
+    def get_processPhase(self):
+        self.fig2 = NOVOSProcesses.make_plotly_figure(self.filenames)
+
+        self.qdask.update_graph(self.fig2)
+        self.browser.reload()
+
+        self.actionShowNovosProcess.setEnabled(False)
+        self.actionShowSignalBrowser.setEnabled(True)
+
+    def on_actionOpenFile_triggered(self):
+        """Opens a file and adds the groups to the tree view"""
+
+        self.file_type = FileType.NONE
+        self.filenames, _ = QtWidgets.QFileDialog.getOpenFileNames(
+            self,
+            "Open File",
+            "",
+            "TDM (*.tdm *.dat *.db)",
+        )
+        self.filename = self.filenames[0]
+
+        self.fig = go.Figure()
+        self.qdask.update_graph(self.fig)
+        self.browser.reload()
+
+        if pathlib.Path(self.filename).suffix.lower() in [".dat", ".db"]:
+            self.load_dat_file(self.filename)
+            self.file_type = FileType.DAT
+        elif pathlib.Path(self.filename).suffix.lower() == ".tdm":
+            self.load_tdm_file(self.filename)
+            self.file_type = FileType.TDM
 
     def load_tdm_file(self, filename):
         self.tdms_file = tdm_loader.OpenFile(filename)
@@ -136,7 +123,8 @@ class MainWindow(QtWidgets.QMainWindow):
         root_node = self._standard_model.invisibleRootItem()
         for group in range(0, len(self.tdms_file)):
             group_node = QtGui.QStandardItem(
-                f"{self.tdms_file.channel_group_name(group)} - [{self.tdms_file.no_channels(group)}]")
+                f"{self.tdms_file.channel_group_name(group)} - [{self.tdms_file.no_channels(group)}]"
+            )
             group_node.setEditable(False)
             group_node.setData(dict(id=group, node="root", secondary_y=False), 999)
             root_node.appendRow(group_node)
@@ -171,47 +159,53 @@ class MainWindow(QtWidgets.QMainWindow):
                         cur.execute(f"SELECT json_extract(rti_json_sample, '$') FROM '{table}';")
                         channels = cur.fetchone()
                         if channels and len(channels) > 0:
-                            group_node = QtGui.QStandardItem(
-                            f"{table}")
+                            group_node = QtGui.QStandardItem(f"{table}")
                             group_node.setEditable(False)
                             group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
                             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
-
         conn.close()
 
         self.actionShowNovosProcess.setEnabled(True)
 
+    def open_menu(self, position):
+        # Get the index of the item at the position where right-click was performed
+        index = self._tree_view.indexAt(position)
+        if not index.isValid():
+            return
 
+        # Check if the item is a channel
+        if index.data(999)["node"] != "leaf":
+            # It's a root item, not a child item
+            return
 
-    def on_actionOpenFile_triggered(self):
-        """Opens a file and adds the groups to the tree view"""
+        item = self._tree_view.model().itemFromIndex(index)
 
-        self.file_type = FileType.NONE
-        self.filenames, _ = QtWidgets.QFileDialog.getOpenFileNames(self, "Open File", "", "TDM (*.tdm *.dat *.db)",)
-        self.filename = self.filenames[0]
+        menu = QtWidgets.QMenu()
+        action1 = menu.addAction("Select and add to secondary axis")
+        action1.triggered.connect(lambda: self.on_secondary_axis_check(item))
 
-        self.fig = go.Figure()
-        self.qdask.update_graph(self.fig)
-        self.browser.reload()
+        # Show the context menu
+        menu.exec_(self._tree_view.viewport().mapToGlobal(position))
 
-        match pathlib.Path(self.filename).suffix.lower():
-            case ".tdm":
-                self.load_tdm_file(self.filename)
-                self.file_type = FileType.TDM
-            case ".dat" | ".db":
-                self.load_dat_file(self.filename)
-                self.file_type = FileType.DAT
+    def on_secondary_axis_check(self, item: QtGui.QStandardItem):
+        data = item.data(999)
+        data["secondary_y"] = True
 
+        item.model().blockSignals(True)
+        item.setData(data, 999)
+        item.model().blockSignals(False)
 
-    def zeroEpoctimestamp_to_datetime(self, dateval: float) -> datetime:
-        """Convert a zero epoch timestamp to a datetime object."""
-        basedate = datetime(year=1, month=1, day=1, hour=0, minute=0)
-        parts = math.modf(dateval)
-        days = timedelta(seconds=parts[1])
-        day_frac = timedelta(seconds=parts[0])
-        return (basedate + days + day_frac) - timedelta(days=365)
+        item.setCheckState(QtCore.Qt.CheckState.Checked)
+
+    def create_layout(self):
+        """Creates the layout for the main window"""
+        self.Hlayout = QtWidgets.QHBoxLayout()
+        self.Hlayout.addWidget(self._tree_view)
+        self.Hlayout.addWidget(self.browser, 10)
+        self.central_widget.setLayout(self.Hlayout)
+        self.setCentralWidget(self.central_widget)
 
     def on_double_clicked(self, index: QtCore.QModelIndex):
         """Finds the channel names and adds them to the tree view"""
@@ -219,7 +213,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.handle_tdm_file(index)
         elif self.file_type == FileType.DAT:
             self.handle_dat_file(index)
-
 
     def handle_tdm_file(self, index: QtCore.QModelIndex):
         """Handles TDM file type"""
@@ -235,8 +228,6 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
-
-
     def handle_dat_file(self, index: QtCore.QModelIndex):
         """Handles DAT file type"""
         if index.data(999)["node"] != "root":
@@ -251,7 +242,6 @@ class MainWindow(QtWidgets.QMainWindow):
             group_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
-
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
@@ -263,7 +253,6 @@ class MainWindow(QtWidgets.QMainWindow):
         elif data_type is not None:
             channel_node.setEnabled(False)
         return channel_node
-
 
     def get_channels_from_rti_json_sample(self, table: str):
         """Connects to the SQLite database and get rti_json_sample,
@@ -290,29 +279,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     else:
                         channels[key] = type(json_data[key])
 
-
-
-
-
         return channels
 
     def get_channels_from_tdm(self, group):
         """Fetches channels from the TDM file"""
         return [(ix, channel.findtext("name")) for ix, channel in enumerate(self.tdms_file._channels_xml(group))]
-
-
-
-    def get_timestamp_from_json(self, data: dict | str) -> datetime:
-        """convert timestamp from json to datetime.datetime:
-        element data timestamp: {sec:, nanosec:}"""
-        if isinstance(data, str):
-            data = json.loads(data)
-        return datetime.fromtimestamp(data["sec"]) + timedelta(
-            microseconds=data["nanosec"] / 1000)
-
-    def get_timestamp_from_ns(self, ns_value: int) -> datetime:
-        """convert ns unixtime to datetime.datetime"""
-        return datetime.fromtimestamp(ns_value / 1e9)
 
     def on_channel_check(self, item):
         """Adds the traces to the graph if the item is checked"""
@@ -327,12 +298,11 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.file_type == FileType.DAT:
             self._get_dat_channel_data(item)
 
-
     def _remove_trace_by_item_name(self, item):
         """Removes a trace by given item name"""
         for ix, trace in enumerate(self.fig.data):
             if trace.name == item.text():
-                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 self.actionShowSignalBrowser.setEnabled(False)
@@ -343,92 +313,18 @@ class MainWindow(QtWidgets.QMainWindow):
         for ix, trace in enumerate(self.fig.data):
             print(trace.name, f"{table} {item_name}")
             if trace.name == f"{table}-{item_name}":
-                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 self.actionShowSignalBrowser.setEnabled(False)
                 break
 
-
-
-
     def _get_tdm_channel_data(self, item):
         """Handles changes for TDM items"""
         y = pd.Series(self.tdms_file.channel(item.parent().data(999)["id"], 0))
-        y = y.apply(self.zeroEpoctimestamp_to_datetime)
+        y = y.apply(TimeConversionUtils.epoch_timestamp_to_datetime)
         data = self.tdms_file.channel(item.parent().data(999)["id"], item.data(999)["id"])
         self._add_scatter_trace_to_fig(y, data, item.text())
-
-    def process_df_rows_to_processes(self, df):
-        processes = {}
-        for row in df.itertuples():
-            timestamp = row[1]
-            phase = row[2]
-            subphase = row[3]
-            processes.setdefault(phase, {}).setdefault(subphase, []).append(timestamp)
-        return processes
-
-    def process_data_to_gannt(self, processes):
-        gannt = []
-        for process in processes:
-            start, end = None, None
-            for subprocess, timestamp in processes[process].items():
-                if not subprocess.endswith("End"):
-                    gannt.append(dict(Task=process, Start=timestamp[0], Finish=timestamp[0] + timedelta(seconds=.2),
-                                      custom=[1, 1], Resource=subprocess))
-                if subprocess.endswith("End"):
-                    end = timestamp[0]
-                    start = end - timedelta(seconds=1) if start is None else start
-                else:
-                    start = timestamp[0]
-                if start and end:
-                    gannt.append(dict(Task=process, Start=start, Finish=end, Resource=process, custom=[.25, .25]))
-                    start = None
-                    end = None
-
-            if start and not end:
-                end = processes[process][subprocess][-1] + timedelta(seconds=.2)
-                gannt.append(dict(Task=process, Start=start, Finish=end, Resource=process, custom=[.25, .25]))
-
-        return gannt
-
-    def process_db_query_to_df(self, filename, query):
-        with sqlite3.connect(filename) as dbcon:
-            df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
-            timestamp_column = "json_extract(rti_json_sample, '$.timestamp')"
-            df[timestamp_column] = df[timestamp_column].apply(json.loads)
-            df[timestamp_column] = df[timestamp_column].apply(self.get_timestamp_from_json)
-        return df
-
-    def get_processPhase(self):
-        query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
-        json_extract(rti_json_sample, '$.phase'),
-        json_extract(rti_json_sample, '$.subPhase'),
-        SampleInfo_reception_timestamp
-        FROM 'ProcessPhase@0' WHERE json_extract(rti_json_sample, '$.timestamp') IS NOT NULL;"""
-
-        list_df = [self.process_db_query_to_df(filename, query) for filename in self.filenames]
-        df = pd.concat(list_df)
-        processes = self.process_df_rows_to_processes(df)
-        gannt = self.process_data_to_gannt(processes)
-
-        if not gannt:
-            return
-
-        fig = px.timeline(gannt, x_start="Start", x_end="Finish", y="Task", color="Resource", custom_data="custom")
-        for bar in fig.data:
-            bar.width = bar.customdata[0][0][0]
-            if bar.customdata[0][0][1] == 1:
-                bar.showlegend = False
-        self.fig2 = fig
-
-        self.qdask.update_graph(self.fig2)
-        self.browser.reload()
-
-        self.actionShowNovosProcess.setEnabled(False)
-        self.actionShowSignalBrowser.setEnabled(True)
-
-
 
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
@@ -447,9 +343,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     df = pd.read_sql_query(query, dbcon, parse_dates={"SampleInfo_reception_timestamp": "ns"})
                     if not df[df.columns[0]].isna().all():
                         df["json_extract(rti_json_sample, '$.timestamp')"] = df[
-                            "json_extract(rti_json_sample, '$.timestamp')"].apply(json.loads)
+                            "json_extract(rti_json_sample, '$.timestamp')"
+                        ].apply(json.loads)
                         df["json_extract(rti_json_sample, '$.timestamp')"] = df[
-                            "json_extract(rti_json_sample, '$.timestamp')"].apply(self.get_timestamp_from_json)
+                            "json_extract(rti_json_sample, '$.timestamp')"
+                        ].apply(TimeConversionUtils.json_to_datetime)
 
                 new_list.append(df)
         df = pd.concat(new_list)
@@ -471,12 +369,17 @@ class MainWindow(QtWidgets.QMainWindow):
             is_boolean = False
         df.sort_index(inplace=True)
 
-
-        #todo refactor this
+        # todo refactor this
         if data_type == str:
             self.fig.add_trace(
-                go.Scatter(x=df.index, y=[f"{table}-{item_name}" for x in df.iterrows()], hovertext=[x[1][0] for x in df.iterrows()],
-                           mode="markers", name=f"{table}-{item_name}"))
+                go.Scatter(
+                    x=df.index,
+                    y=[f"{table}-{item_name}" for x in df.iterrows()],
+                    hovertext=[x[1][0] for x in df.iterrows()],
+                    mode="markers",
+                    name=f"{table}-{item_name}",
+                )
+            )
             self.fig.data[-1].update(yaxis="y4")
             self.fig.update_layout(
                 yaxis4=dict(
@@ -484,23 +387,26 @@ class MainWindow(QtWidgets.QMainWindow):
                     overlaying='y',
                     showgrid=False,
                     minor_showgrid=False,
-                ))
+                )
+            )
             self.qdask.update_graph(self.fig)
             self.browser.reload()
             self.actionShowSignalBrowser.setEnabled(False)
             return
 
-        self._add_scatter_trace_to_fig(df.index, df[f"json_extract(rti_json_sample, '$.{item_name}')"], item.text(),
-                                       is_boolean=is_boolean, secondary_y=item.data(999)["secondary_y"])
-
-
+        self._add_scatter_trace_to_fig(
+            df.index,
+            df[f"json_extract(rti_json_sample, '$.{item_name}')"],
+            item.text(),
+            is_boolean=is_boolean,
+            secondary_y=item.data(999)["secondary_y"],
+        )
 
         item.model().blockSignals(True)
         data = item.data(999)
         data["secondary_y"] = False
         item.setData(data, 999)
         item.model().blockSignals(False)
-
 
     def _add_scatter_trace_to_fig(self, x, y, text, is_boolean=False, secondary_y=False):
         """Adds scatter trace to the fig"""
@@ -516,24 +422,26 @@ class MainWindow(QtWidgets.QMainWindow):
                     overlaying='y',
                     showgrid=False,
                     minor_showgrid=False,
-                ))
+                )
+            )
 
         elif is_boolean:
             self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text, yaxis="y2"), row=1, col=1)
             self.fig.data[-1].update(yaxis="y2")
             self.fig.update_layout(
                 yaxis2=dict(
-                    range=[-.1, 1.1],
+                    range=[-0.1, 1.1],
                     overlaying='y',
                     side='left',
                     fixedrange=True,
                     showgrid=False,
                     minor_showgrid=False,
-                    showticklabels=False,))
+                    showticklabels=False,
+                )
+            )
 
         else:
             self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=text), row=1, col=1)
-
 
         self.qdask.update_graph(self.fig)
         self.browser.reload()
@@ -549,6 +457,7 @@ def main():
     window.show()
     app.aboutToQuit.connect(window.qdask.stop)
     sys.exit(app.exec())
+
 
 if __name__ == '__main__':
     main()
