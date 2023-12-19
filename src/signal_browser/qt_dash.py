@@ -6,9 +6,11 @@ from dash import no_update
 
 class DashThread(QtCore.QThread):
     """A thread that runs a dash app"""
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, host="http://127.0.0.1", port=8050):
         """Initializes the thread"""
         super().__init__(parent)
+        self.host = host
+        self.port = port
         self._app = dash.Dash()
         self._app.layout = dash.html.Div()
         fig = go.Figure()
@@ -43,7 +45,7 @@ class DashThread(QtCore.QThread):
 
     def run(self):
         """Runs the app"""
-        self._app.run_server()
+        self._app.run(host=self.host, port=self.port, debug=False, use_reloader=False)
 
     def stop(self):
         self.terminate()

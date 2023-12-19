@@ -1,6 +1,11 @@
+import base64
+import io
 import json
 import math
+import zipfile
 from datetime import datetime, timedelta
+from typing import BinaryIO
+
 import pandas as pd
 
 
@@ -180,3 +185,44 @@ def retain_changed_values_on_series(data: pd.Series):
     :return: A new pandas Series object containing only the values that have changed.
     """
     return data.where(data.shift() != data).dropna()
+
+
+def read_struct_from_binary(binary: BinaryIO):
+    """
+    Reads a structured string from a binary file.
+
+    Args:
+        binary (BinaryIO): The binary file to read from.
+
+    Returns:
+        str: The decoded structured string.
+
+    """
+    length = int.from_bytes(binary.read(4), "little")
+    bufferd = binary.read(length)
+    struct = bufferd.decode("ANSI")
+    return struct
+
+def zipfile_from_bytes(content_bytes):
+    """
+    Create a ZipFile object from a given base64 encoded byte content.
+
+    :param content_bytes: The base64 encoded byte content of the ZIP file.
+    :type content_bytes: bytes
+    :return: The ZipFile object representing the given ZIP file.
+    :rtype: zipfile.ZipFile
+
+    Example Usage:
+        >>> content_bytes = b'eJxTTMoPS2Z'
+        >>> zipfile = zipfile_from_bytes(content_bytes)
+        >>> zipfile.namelist()
+
+    Note:
+        This method uses the base64 and zipfile modules from the Python standard library to decode the base64 encoded byte content and create a ZipFile object from it.
+    """
+    content_decoded = base64.b64decode(content_bytes)
+    # Use BytesIO to handle the decoded content
+    zip_str = io.BytesIO(content_decoded)
+    # Now you can use ZipFile to take the BytesIO output
+    zfile = zipfile.ZipFile(zip_str, 'r')
+    return zfile

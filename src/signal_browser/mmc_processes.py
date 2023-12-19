@@ -53,8 +53,6 @@ class MMCProcesses:
         for i, d in enumerate(fig.data):
             d.width = tasks[tasks["group"] == d.name]["width"]
 
-        fig.show()
-
         return fig
 
     @classmethod
