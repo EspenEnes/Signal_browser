@@ -26,6 +26,7 @@ class FileType(Enum):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=8050):
         super().__init__(parent)
+        self.resize(800, 600)
         self._host = "127.0.0.1"
         self._port = port
 
@@ -40,7 +41,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """Initializes the main window and UI elements"""
         self.file_type = FileType.NONE
         self.setWindowTitle("Signal Viewer")
-        self.central_widget = QtWidgets.QWidget()
         self._standard_model = QtGui.QStandardItemModel(self)
         self._tree_view = QtWidgets.QTreeView(self)
         self._tree_view.setModel(self._standard_model)
@@ -52,11 +52,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def create_layout(self):
         """Creates the layout for the main window"""
-        self.Hlayout = QtWidgets.QHBoxLayout()
-        self.Hlayout.addWidget(self._tree_view)
-        self.Hlayout.addWidget(self.browser, 10)
-        self.central_widget.setLayout(self.Hlayout)
-        self.setCentralWidget(self.central_widget)
+        self.splitter = QtWidgets.QSplitter(self)
+        self.splitter.setOrientation(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self._tree_view)
+        self.splitter.addWidget(self.browser)
+        self.setCentralWidget(self.splitter)
+        self.splitter.setSizes([200, 400])
+        self.splitter.setStretchFactor(1, 1)
 
     def connect_signals(self):
         """Connects the signals to the slots"""
@@ -316,9 +318,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # todo refactor this
         if data_type == str:
+            y = [f"{table}-{item_name}" for x in df.iterrows()]
             self._add_scatter_trace_to_fig(
                 df.index,
-                [f"{table}-{item_name}" for x in df.iterrows()],
+                y,
                 f"{table}-{item_name}",
                 is_str=True,
                 hovertext=[x[1][0] for x in df.iterrows()],

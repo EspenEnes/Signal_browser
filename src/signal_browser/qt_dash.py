@@ -40,7 +40,7 @@ class DashThread(QtCore.QThread):
             style={'height': '100vh'},
         )
 
-    @staticmethod
+
     @dash.callback(
         dash.Output('fig', 'figure'), dash.Input('multiplot-button', 'n_clicks'), dash.State('fig', 'figure')
     )
