@@ -16,6 +16,14 @@
 pip install git+https://github.com/EspenEnes/Signal_browser.git
 ```
 
+if you want to isolate the installation from other python projects, you can use pipx to install it
+```console
+pip install pipx
+pipx install git+https://github.com/EspenEnes/Signal_browser.git
+```
+
+```console
+
 ## execute from cmd
 ```console
 ..signal_browser
