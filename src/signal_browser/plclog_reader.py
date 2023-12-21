@@ -26,6 +26,7 @@ class PlcLogReader:
                 )
                 df = pd.concat([df, new])
                 df = df[~df.index.duplicated(keep='first')]
+            df.sort_index(inplace=True)
             return df
 
         f = cls.open_file(file)

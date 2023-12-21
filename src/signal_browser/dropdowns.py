@@ -4,7 +4,7 @@ from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
 import pandas as pd
 import pathlib
 import plotly.graph_objects as go
-from plotly import subplots
+
 
 
 from .novos_processes import NOVOSProcesses
@@ -34,6 +34,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.create_layout()
         self.create_menubar()
         self.connect_signals()
+        self.fig = self.qdask.fig
 
     def init_ui_elements_and_vars(self):
         """Initializes the main window and UI elements"""
@@ -127,8 +128,6 @@ class MainWindow(QtWidgets.QMainWindow):
             "TDM (*.tdm *.dat *.db *.zip)",
         )
         self.filename = self.filenames[0]
-
-        self.fig = go.Figure()
         self.qdask.update_graph(self.fig)
         self.browser.reload()
 
@@ -181,9 +180,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_PlcLog_file(self, filename):
         self.log_file = PlcLogReader.read_logfile(filename)
         self._standard_model.clear()
-        self.fig = subplots.make_subplots(rows=1, cols=1)
-        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
-        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
+        self.fig.replace(go.Figure())
+        self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
         for channel in self.log_file.columns:
@@ -200,9 +198,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_tdm_file(self, filename):
         self._standard_model.clear()
-        self.fig = subplots.make_subplots(rows=1, cols=1)
-        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
-        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
+        self.fig.replace(go.Figure())
+        self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
 
@@ -218,9 +215,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_dat_file(self, filename):
         self._standard_model.clear()
-        self.fig = subplots.make_subplots(rows=1, cols=1, specs=[[{"secondary_y": True}]])
-        self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
-        self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray')
+        self.fig.replace(go.Figure())
+        self.qdask.update_graph(self.fig)
 
         with sqlite3.connect(filename) as conn:
             cur = conn.cursor()
@@ -372,10 +368,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _add_scatter_trace_to_fig(self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None):
         """Adds scatter trace to the fig"""
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
-            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name), row=1, col=1)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name), hf_x=x, hf_y=y)
 
         elif secondary_y and not is_boolean and not is_str:
-            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name, yaxis="y3"), row=1, col=1)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3"), hf_x=x, hf_y=y)
             self.fig.data[-1].update(yaxis="y3")
             self.fig.update_layout(
                 yaxis3=dict(
@@ -387,7 +383,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
         elif is_boolean:
-            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name, yaxis="y2"), row=1, col=1)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y2"), hf_x=x, hf_y=y)
             self.fig.data[-1].update(yaxis="y2")
             self.fig.update_layout(
                 yaxis2=dict(
@@ -403,12 +399,12 @@ class MainWindow(QtWidgets.QMainWindow):
         elif is_str:
             self.fig.add_trace(
                 go.Scatter(
-                    x=x,
-                    y=y,
                     hovertext=hovertext,
                     mode="markers",
                     name=name,
-                )
+                ),
+                hf_x=x,
+                hf_y=y,
             )
             self.fig.data[-1].update(yaxis="y4")
             self.fig.update_layout(
@@ -421,7 +417,11 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
         else:
-            self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name), row=1, col=1)
+            self.fig.add_trace(
+                go.Scatter(mode='lines', name=name),
+                hf_x=x,
+                hf_y=y,
+            )
 
         self.qdask.update_graph(self.fig)
         self.browser.reload()
