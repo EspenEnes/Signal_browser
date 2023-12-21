@@ -104,7 +104,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_novos_process(self):
         self.fig2 = NOVOSProcesses.make_plotly_figure(self.filenames)
 
-        self.qdask.update_graph(self.fig2)
+        self.qdask.update_progress(self.fig2)
         self.browser.reload()
 
         self.actionShowNovosProcess.setEnabled(False)
@@ -113,7 +113,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_mmc_process(self):
         self.fig2 = MMCProcesses.make_plotly_figure(self.log_file)
 
-        self.qdask.update_graph(self.fig2)
+        self.qdask.update_progress(self.fig2)
         self.browser.reload()
 
         self.actionShowMMCProcess.setEnabled(False)

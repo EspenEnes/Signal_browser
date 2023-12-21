@@ -24,6 +24,22 @@ class DashThread(QtCore.QThread):
 
         self.update_graph(self.fig)
 
+    def update_progress(self, progress_fig):
+        """Updates the graph with the given figure"""
+        self._app.layout = dash.html.Div(
+            children=[
+                dash.html.Button('Multiplot', id='multiplot-button', n_clicks=0),
+                dash.dcc.Graph(
+                    id='fig',
+                    figure={'data': progress_fig.data, 'layout': progress_fig.layout},
+                    style={'height': '100vh'},
+                    config={"scrollZoom": True},
+                ),
+                # trace_updater.TraceUpdater(id="trace-updater", gdID="fig"),
+            ],
+            style={'height': '100vh'},
+        )
+
     def update_graph(self, fig):
         """Updates the graph with the given figure"""
         self._app.layout = dash.html.Div(
@@ -39,7 +55,6 @@ class DashThread(QtCore.QThread):
             ],
             style={'height': '100vh'},
         )
-
 
     @dash.callback(
         dash.Output('fig', 'figure'), dash.Input('multiplot-button', 'n_clicks'), dash.State('fig', 'figure')
