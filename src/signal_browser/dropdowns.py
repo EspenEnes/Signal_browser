@@ -4,7 +4,7 @@ from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
 import pandas as pd
 import pathlib
 import plotly.graph_objects as go
-
+import re
 
 
 from .novos_processes import NOVOSProcesses
@@ -185,11 +185,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root_node = self._standard_model.invisibleRootItem()
         for channel in self.log_file.columns:
-            channel_node = QtGui.QStandardItem(channel)
-            channel_node.setData(dict(id=channel, node="leaf", secondary_y=False), 999)
-            channel_node.setCheckable(True)
-            channel_node.setEditable(False)
-            channel_node.setEnabled(True)
+            channel_node = self.create_channel_item(channel, channel)
             root_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -430,6 +426,16 @@ class MainWindow(QtWidgets.QMainWindow):
     def _remove_trace_by_item_name(self, item):
         """Removes a trace by given item name"""
         for ix, trace in enumerate(self.fig.data):
+            if match := re.findall(r'b>(.+)<i', trace.name):
+                name = match[0].rstrip()
+                name = name.lstrip()
+                if name == item.text():
+                    self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
+                    self.qdask.update_graph(self.fig)
+                    self.browser.reload()
+                    self.actionShowSignalBrowser.setEnabled(False)
+                    break
+
             if trace.name == item.text():
                 self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
                 self.qdask.update_graph(self.fig)
@@ -440,13 +446,15 @@ class MainWindow(QtWidgets.QMainWindow):
         item_name = item.data(999)["id"]
         table = item.parent().data(999)["id"]
         for ix, trace in enumerate(self.fig.data):
-            print(trace.name, f"{table} {item_name}")
-            if trace.name == f"{table}-{item_name}":
-                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
-                self.qdask.update_graph(self.fig)
-                self.browser.reload()
-                self.actionShowSignalBrowser.setEnabled(False)
-                break
+            if match := re.findall(r'b>(.+)<i', trace.name):
+                name = match[0].rstrip()
+                name = name.lstrip()
+                if name == f"{table}-{item_name}":
+                    self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
+                    self.qdask.update_graph(self.fig)
+                    self.browser.reload()
+                    self.actionShowSignalBrowser.setEnabled(False)
+                    break
 
 
 def main():
