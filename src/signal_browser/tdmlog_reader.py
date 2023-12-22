@@ -25,4 +25,5 @@ class TDMLogReader:
         timestamp = list(map(TimeConversionUtils.epoch_timestamp_to_datetime, tdm_file.channel(group, 0)))
         data = tdm_file.channel(group, channel)
         df = pd.Series(data, timestamp, name=tdm_file.channel_name(group, channel))
+        df.sort_index(inplace=True)
         return df

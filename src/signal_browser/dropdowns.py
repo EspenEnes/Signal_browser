@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 from enum import Enum, auto
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
@@ -32,7 +33,7 @@ class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
         if "b_unit" in index.data(999).keys():
             if index.data(999)["b_unit"] is not None:
                 option.backgroundBrush = QtGui.QColor('Yellow')
-                option.text = f'{index.data(999)["id"]} [{index.data(999)["b_unit"]}->{index.data(999)["c_unit"]}]'
+                option.text = f'{index.data(999)["name"]} [{index.data(999)["b_unit"]}->{index.data(999)["c_unit"]}]'
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -196,8 +197,6 @@ class MainWindow(QtWidgets.QMainWindow):
         item.model().blockSignals(True)
         item.setData(data, 999)
         item.model().blockSignals(False)
-        # if base_unit and conc_unit:
-        #     item.setCheckState(QtCore.Qt.CheckState.Checked)
 
     def open_unit_convertion_dialog(self):
         dialog = QtWidgets.QDialog()
@@ -355,7 +354,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
-        channel_node.setData(dict(id=idx, node="leaf", secondary_y=False, data_type=data_type), 999)
+        channel_node.setData(dict(id=idx, name=name,  node="leaf", secondary_y=False, data_type=data_type), 999)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
         if data_type in [int, float, bool, str]:
@@ -380,8 +379,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self._get_plc_log_channel_data(item)
 
     def _get_plc_log_channel_data(self, item):
-        y = self.log_file[item.text()].index
-        data = self.log_file[item.text()]
+        df = self.log_file[item.text()]
+
         #todo Move unit convertion to its own function.
         ################ unit convertion ################################
         b_unit, c_unit = None, None
@@ -390,11 +389,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if "c_unit" in item.data(999):
             c_unit = item.data(999)["c_unit"]
         if b_unit and c_unit:
-            a = data.to_numpy() * self.ureg[b_unit]
-            data = a.to(self.ureg[c_unit]).magnitude
+            a = df.to_numpy() * self.ureg[b_unit]
+            a = a.to(self.ureg[c_unit]).magnitude
+            df = pd.Series(a, df.index)
         ####################################################################
 
-        self._add_scatter_trace_to_fig(y, data, item.text())
+        self._add_scatter_trace_to_fig(df.index, df, item.text())
 
     def _get_tdm_channel_data(self, item):
         """Handles changes for TDM items"""
@@ -412,7 +412,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if b_unit and c_unit:
             a = df.to_numpy() * self.ureg[b_unit]
             a = a.to(self.ureg[c_unit])
-            df = a
+            df = pd.Series(a,df.index)
         ####################################################################
 
         self._add_scatter_trace_to_fig(df.index, df, item.text())
@@ -430,7 +430,6 @@ class MainWindow(QtWidgets.QMainWindow):
                     df = RTILogReader.get_channel_trace(dbcon, table, item_name)
                     new_list.append(df)
         df = pd.concat(new_list)
-
         self._dat_select_index(df)
         is_boolean = self._dat_is_boolean(df, item_name)
 
@@ -441,7 +440,6 @@ class MainWindow(QtWidgets.QMainWindow):
             b_unit = item.data(999)["b_unit"]
         if "c_unit" in item.data(999):
             c_unit = item.data(999)["c_unit"]
-        print(b_unit, c_unit)
         if b_unit and c_unit:
             a = df[f"json_extract(rti_json_sample, '$.{item_name}')"].to_numpy() * self.ureg[b_unit]
             a = a.to(self.ureg[c_unit])
