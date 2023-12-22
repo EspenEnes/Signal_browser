@@ -382,6 +382,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def _get_plc_log_channel_data(self, item):
         y = self.log_file[item.text()].index
         data = self.log_file[item.text()]
+        #todo Move unit convertion to its own function.
+        ################ unit convertion ################################
+        b_unit, c_unit = None, None
+        if "b_unit" in item.data(999):
+            b_unit = item.data(999)["b_unit"]
+        if "c_unit" in item.data(999):
+            c_unit = item.data(999)["c_unit"]
+        if b_unit and c_unit:
+            a = data.to_numpy() * self.ureg[b_unit]
+            data = a.to(self.ureg[c_unit]).magnitude
+        ####################################################################
+
         self._add_scatter_trace_to_fig(y, data, item.text())
 
     def _get_tdm_channel_data(self, item):
@@ -389,6 +401,20 @@ class MainWindow(QtWidgets.QMainWindow):
         group = item.parent().data(999)["id"]
         channel = item.data(999)["id"]
         df = TDMLogReader.get_data(self.filename, group, channel)
+
+        #todo Move unit convertion to its own function.
+        ################ unit convertion ################################
+        b_unit, c_unit = None, None
+        if "b_unit" in item.data(999):
+            b_unit = item.data(999)["b_unit"]
+        if "c_unit" in item.data(999):
+            c_unit = item.data(999)["c_unit"]
+        if b_unit and c_unit:
+            a = df.to_numpy() * self.ureg[b_unit]
+            a = a.to(self.ureg[c_unit])
+            df = a
+        ####################################################################
+
         self._add_scatter_trace_to_fig(df.index, df, item.text())
 
     def _get_dat_channel_data(self, item):
@@ -415,6 +441,7 @@ class MainWindow(QtWidgets.QMainWindow):
             b_unit = item.data(999)["b_unit"]
         if "c_unit" in item.data(999):
             c_unit = item.data(999)["c_unit"]
+        print(b_unit, c_unit)
         if b_unit and c_unit:
             a = df[f"json_extract(rti_json_sample, '$.{item_name}')"].to_numpy() * self.ureg[b_unit]
             a = a.to(self.ureg[c_unit])
