@@ -5,11 +5,13 @@ import pandas as pd
 import pathlib
 import plotly.graph_objects as go
 import re
+import pint
 
 
 from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
 from .plclog_reader import PlcLogReader
+from .plclog_reader import PlcLogReader_Async
 from .tdmlog_reader import TDMLogReader
 from .rtilog_reader import RTILogReader
 from .qt_dash import DashThread
@@ -23,12 +25,23 @@ class FileType(Enum):
     NONE = auto()
 
 
+class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+
+        if "b_unit" in index.data(999).keys():
+            if index.data(999)["b_unit"] is not None:
+                option.backgroundBrush = QtGui.QColor('Yellow')
+                option.text = f'{index.data(999)["id"]} [{index.data(999)["b_unit"]}->{index.data(999)["c_unit"]}]'
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=8050):
         super().__init__(parent)
         self.resize(800, 600)
         self._host = "127.0.0.1"
         self._port = port
+        self.ureg = pint.UnitRegistry()
 
         self.DASH_URL = f"http://{self._host}:{port}"
         self.init_ui_elements_and_vars()
@@ -44,6 +57,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._standard_model = QtGui.QStandardItemModel(self)
         self._tree_view = QtWidgets.QTreeView(self)
         self._tree_view.setModel(self._standard_model)
+
+        delegate = ColorizeDelegate(self._tree_view)
+        self._tree_view.setItemDelegate(delegate)
+
         self.qdask = DashThread(host=self._host, port=self._port)
         self.browser = QtWebEngineWidgets.QWebEngineView(self)
         self.browser.load(QtCore.QUrl(self.DASH_URL))
@@ -158,10 +175,84 @@ class MainWindow(QtWidgets.QMainWindow):
         menu = QtWidgets.QMenu()
 
         action1 = menu.addAction("Select and add to secondary axis")
+        action2 = menu.addAction("Unit Conversion")
         action1.triggered.connect(lambda: self.open_context_menu_secondary_y(item))
+        action2.triggered.connect(lambda: self.unit_convertion(item))
+
+        action2.setEnabled(True)
+        if item.checkState() == QtCore.Qt.CheckState.Checked:
+            action2.setEnabled(False)
 
         # Show the context menu
         menu.exec_(self._tree_view.viewport().mapToGlobal(position))
+
+    def unit_convertion(self, item):
+        base_unit, conc_unit = self.open_unit_convertion_dialog()
+
+        data = item.data(999)
+        data["b_unit"] = base_unit
+        data["c_unit"] = conc_unit
+
+        item.model().blockSignals(True)
+        item.setData(data, 999)
+        item.model().blockSignals(False)
+        # if base_unit and conc_unit:
+        #     item.setCheckState(QtCore.Qt.CheckState.Checked)
+
+    def open_unit_convertion_dialog(self):
+        dialog = QtWidgets.QDialog()
+        dialog.setWindowTitle("Unit Conversion")
+        layout = QtWidgets.QVBoxLayout()
+
+        input1 = QtWidgets.QLineEdit(dialog)
+        input1.setPlaceholderText("Base Unit")
+
+        input2 = QtWidgets.QLineEdit(dialog)
+        input2.setPlaceholderText("Conversion Unit")
+
+        buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+
+        # Connect the signals to the slots
+        buttonBox.accepted.connect(dialog.accept)
+        buttonBox.rejected.connect(dialog.reject)
+        layout.addWidget(input1)
+        layout.addWidget(input2)
+        layout.addWidget(buttonBox)
+
+        dialog.setLayout(layout)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            unit1, unit2 = self.validate_unit_convertion(input1.text(), input2.text())
+            if (unit1 is not None) and (unit2 is not None) and (unit1 != "") and (unit2 != ""):  #todo This looks like shit
+                return unit1, unit2
+            else:
+                return None, None
+        else:
+            return None, None
+
+    def validate_unit_convertion(self, input1, input2):
+        msg_box = QtWidgets.QMessageBox()
+        msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        msg_box.setWindowTitle("Alert: Wrong units")
+        try:
+            base_unit = self.ureg[input1]
+        except pint.UndefinedUnitError:
+            msg_box.setText(f"Base unit {input1} is not a valid unit of measurement")
+            msg_box.exec()
+            return None, None
+
+        try:
+            conv_unit = self.ureg[input2]
+        except pint.UndefinedUnitError:
+            msg_box.setText(f"Converted unit {input2} is not a valid unit of measurement")
+            msg_box.exec()
+            return None, None
+
+        if base_unit.is_compatible_with(conv_unit):
+            return input1, input2
+        else:
+            msg_box.setText(f"{input1} and {input2} is not compatible units")
+            msg_box.exec()
+            return None, None
 
     def open_context_menu_secondary_y(self, item: QtGui.QStandardItem):
         data = item.data(999)
@@ -180,7 +271,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.handle_dat_file(index)
 
     def load_PlcLog_file(self, filename):
-        self.log_file = PlcLogReader.read_logfile(filename)
+        self.log_file = PlcLogReader_Async.read_logfile(filename)
+
         self._standard_model.clear()
         self.fig.replace(go.Figure())
         self.qdask.update_graph(self.fig)
@@ -316,6 +408,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self._dat_select_index(df)
         is_boolean = self._dat_is_boolean(df, item_name)
 
+        #todo Move unit convertion to its own function.
+        ################ unit convertion ################################
+        b_unit, c_unit = None, None
+        if "b_unit" in item.data(999):
+            b_unit = item.data(999)["b_unit"]
+        if "c_unit" in item.data(999):
+            c_unit = item.data(999)["c_unit"]
+        if b_unit and c_unit:
+            a = df[f"json_extract(rti_json_sample, '$.{item_name}')"].to_numpy() * self.ureg[b_unit]
+            a = a.to(self.ureg[c_unit])
+            df[f"json_extract(rti_json_sample, '$.{item_name}')"] = a
+        ####################################################################
+
         # todo refactor this
         if data_type == str:
             y = [f"{table}-{item_name}" for x in df.iterrows()]
@@ -330,6 +435,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.browser.reload()
             self.actionShowSignalBrowser.setEnabled(False)
         else:
+            df[f"json_extract(rti_json_sample, '$.{item_name}')"] = df[
+                f"json_extract(rti_json_sample, '$.{item_name}')"
+            ]
             self._add_scatter_trace_to_fig(
                 df.index,
                 df[f"json_extract(rti_json_sample, '$.{item_name}')"],
