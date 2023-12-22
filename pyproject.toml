@@ -35,7 +35,8 @@ dependencies = [
 "PySide6",
 "pandas",
 "tdm-loader",
-"plotly-resampler"
+"plotly-resampler",
+"pint"
 ]
 
 [project.gui-scripts]
