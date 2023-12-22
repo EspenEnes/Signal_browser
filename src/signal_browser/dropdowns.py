@@ -1,4 +1,3 @@
-import datetime
 import sqlite3
 from enum import Enum, auto
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
@@ -30,10 +29,18 @@ class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
 
-        if "b_unit" in index.data(999).keys():
-            if index.data(999)["b_unit"] is not None:
-                option.backgroundBrush = QtGui.QColor('Yellow')
-                option.text = f'{index.data(999)["name"]} [{index.data(999)["b_unit"]}->{index.data(999)["c_unit"]}]'
+        data = index.data(999)
+        if not isinstance(data, dict):
+            return
+
+        b_unit = data.get('b_unit')
+        c_unit = data.get('c_unit')
+        name = data.get('name')
+
+        if b_unit and c_unit and name:
+            option.backgroundBrush = QtGui.QColor('Yellow')
+            option.text = f'{data["name"]} [{data["b_unit"]}->{data["c_unit"]}]'
+
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -221,7 +228,9 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog.setLayout(layout)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             unit1, unit2 = self.validate_unit_convertion(input1.text(), input2.text())
-            if (unit1 is not None) and (unit2 is not None) and (unit1 != "") and (unit2 != ""):  #todo This looks like shit
+            if (
+                (unit1 is not None) and (unit2 is not None) and (unit1 != "") and (unit2 != "")
+            ):  # todo This looks like shit
                 return unit1, unit2
             else:
                 return None, None
@@ -252,6 +261,7 @@ class MainWindow(QtWidgets.QMainWindow):
             msg_box.setText(f"{input1} and {input2} is not compatible units")
             msg_box.exec()
             return None, None
+        return None, None
 
     def open_context_menu_secondary_y(self, item: QtGui.QStandardItem):
         data = item.data(999)
@@ -380,20 +390,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _get_plc_log_channel_data(self, item):
         df = self.log_file[item.text()]
-
-        #todo Move unit convertion to its own function.
-        ################ unit convertion ################################
-        b_unit, c_unit = None, None
-        if "b_unit" in item.data(999):
-            b_unit = item.data(999)["b_unit"]
-        if "c_unit" in item.data(999):
-            c_unit = item.data(999)["c_unit"]
-        if b_unit and c_unit:
-            a = df.to_numpy() * self.ureg[b_unit]
-            a = a.to(self.ureg[c_unit]).magnitude
-            df = pd.Series(a, df.index)
-        ####################################################################
-
+        df = self._unit_convertion(item, df)
         self._add_scatter_trace_to_fig(df.index, df, item.text())
 
     def _get_tdm_channel_data(self, item):
@@ -401,9 +398,10 @@ class MainWindow(QtWidgets.QMainWindow):
         group = item.parent().data(999)["id"]
         channel = item.data(999)["id"]
         df = TDMLogReader.get_data(self.filename, group, channel)
+        df = self._unit_convertion(item, df)
+        self._add_scatter_trace_to_fig(df.index, df, item.text())
 
-        #todo Move unit convertion to its own function.
-        ################ unit convertion ################################
+    def _unit_convertion(self, item, df):
         b_unit, c_unit = None, None
         if "b_unit" in item.data(999):
             b_unit = item.data(999)["b_unit"]
@@ -412,10 +410,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if b_unit and c_unit:
             a = df.to_numpy() * self.ureg[b_unit]
             a = a.to(self.ureg[c_unit])
-            df = pd.Series(a,df.index)
-        ####################################################################
-
-        self._add_scatter_trace_to_fig(df.index, df, item.text())
+            df = pd.Series(a, df.index)
+        return df
 
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
@@ -430,42 +426,27 @@ class MainWindow(QtWidgets.QMainWindow):
                     df = RTILogReader.get_channel_trace(dbcon, table, item_name)
                     new_list.append(df)
         df = pd.concat(new_list)
-        self._dat_select_index(df)
+        df = self._dat_select_index(df)
+        df = self._unit_convertion(item, df)
         is_boolean = self._dat_is_boolean(df, item_name)
-
-        #todo Move unit convertion to its own function.
-        ################ unit convertion ################################
-        b_unit, c_unit = None, None
-        if "b_unit" in item.data(999):
-            b_unit = item.data(999)["b_unit"]
-        if "c_unit" in item.data(999):
-            c_unit = item.data(999)["c_unit"]
-        if b_unit and c_unit:
-            a = df[f"json_extract(rti_json_sample, '$.{item_name}')"].to_numpy() * self.ureg[b_unit]
-            a = a.to(self.ureg[c_unit])
-            df[f"json_extract(rti_json_sample, '$.{item_name}')"] = a
-        ####################################################################
 
         # todo refactor this
         if data_type == str:
-            y = [f"{table}-{item_name}" for x in df.iterrows()]
+            y = [f"{table}-{item_name}" for x in df.values]
             self._add_scatter_trace_to_fig(
                 df.index,
                 y,
                 f"{table}-{item_name}",
                 is_str=True,
-                hovertext=[x[1][0] for x in df.iterrows()],
+                hovertext=df.values,
             )
             self.qdask.update_graph(self.fig)
             self.browser.reload()
             self.actionShowSignalBrowser.setEnabled(False)
         else:
-            df[f"json_extract(rti_json_sample, '$.{item_name}')"] = df[
-                f"json_extract(rti_json_sample, '$.{item_name}')"
-            ]
             self._add_scatter_trace_to_fig(
                 df.index,
-                df[f"json_extract(rti_json_sample, '$.{item_name}')"],
+                df,
                 f"{table}-{item_name}",
                 is_boolean=is_boolean,
                 secondary_y=item.data(999)["secondary_y"],
@@ -479,17 +460,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _dat_select_index(self, df):
         if not df[df.columns[0]].isna().all():
+            df.drop("SampleInfo_reception_timestamp", axis=1, inplace=True)
             df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
         else:
+            df.drop("json_extract(rti_json_sample, '$.timestamp')", axis=1, inplace=True)
             df.set_index("SampleInfo_reception_timestamp", inplace=True)
+        df = df.squeeze()
         df.sort_index(inplace=True)
+        return df
 
     def _dat_is_boolean(self, df, item_name):
-        if df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0, 1]).all():
+        if df.isin([0, 1]).all():
             is_boolean = True
-        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([1]).all():
+        elif df.isin([1]).all():
             is_boolean = True
-        elif df[f"json_extract(rti_json_sample, '$.{item_name}')"].isin([0]).all():
+        elif df.isin([0]).all():
             is_boolean = True
         elif item_name == "novosControl":
             is_boolean = True
