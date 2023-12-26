@@ -10,9 +10,8 @@ import pint
 
 from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
-from .plclog_reader import PlcLogReader
 from .plclog_reader import PlcLogReader_Async
-from .tdmlog_reader import TDMLogReader
+from .tdmlog_reader import TdmGetGroupsWorker, TdmGetChannelsWorker, TdmGetDataWorker
 from .rtilog_reader import RTILogReader
 from .qt_dash import DashThread
 
@@ -42,6 +41,28 @@ class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
             option.text = f'{data["name"]} [{data["b_unit"]}->{data["c_unit"]}]'
 
 
+class CustomStandardItemModel(QtGui.QStandardItemModel):
+    """Reimplementation of QStandardItemmodel so it can filer out CheckStateRoles"""
+
+    checkStateChanged = QtCore.Signal(QtGui.QStandardItem)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+    def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
+        return super().data(index, role)
+
+    def setData(self, index, value, role=QtCore.Qt.ItemDataRole.DisplayRole):
+        state = self.data(index, QtCore.Qt.ItemDataRole.CheckStateRole)
+
+        if role == QtCore.Qt.ItemDataRole.CheckStateRole and state != value:
+            item = self.itemFromIndex(index)
+            result = super().setData(index, value, role)
+            self.checkStateChanged.emit(item)
+            return result
+
+        return super().setData(index, value, role)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None, port=8050):
@@ -57,14 +78,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.create_menubar()
         self.connect_signals()
         self.fig = self.qdask.fig
+        self.thread_pool = QtCore.QThreadPool()
 
     def init_ui_elements_and_vars(self):
         """Initializes the main window and UI elements"""
         self.file_type = FileType.NONE
         self.setWindowTitle("Signal Viewer")
-        self._standard_model = QtGui.QStandardItemModel(self)
+        self._standard_model = CustomStandardItemModel(self)
         self._tree_view = QtWidgets.QTreeView(self)
         self._tree_view.setModel(self._standard_model)
+        self._load_icon = QtGui.QIcon(str(pathlib.Path(__file__).parent.joinpath("Loading_icon2.png")))
 
         delegate = ColorizeDelegate(self._tree_view)
         self._tree_view.setItemDelegate(delegate)
@@ -88,7 +111,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def connect_signals(self):
         """Connects the signals to the slots"""
         self._tree_view.doubleClicked.connect(self.on_double_clicked)
-        self._standard_model.itemChanged.connect(self.on_channel_checkbox)
+        self._standard_model.checkStateChanged.connect(self.on_channel_checkbox)
         self._tree_view.customContextMenuRequested.connect(self.open_context_menu)
 
         self.actionOpenFile.triggered.connect(self.on_actionOpenFile_triggered)
@@ -154,6 +177,9 @@ class MainWindow(QtWidgets.QMainWindow):
             "",
             "TDM (*.tdm *.dat *.db *.zip)",
         )
+        if len(self.filenames) == 0:
+            return
+
         self.filename = self.filenames[0]
         self.qdask.update_graph(self.fig)
         self.browser.reload()
@@ -162,8 +188,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.load_dat_file(self.filename)
             self.file_type = FileType.DAT
         elif pathlib.Path(self.filename).suffix.lower() == ".tdm":
-            self.load_tdm_file(self.filename)
-            self.file_type = FileType.TDM
+            worker = TdmGetGroupsWorker(self.filename)
+            worker.signals.Groups_Signal.connect(self.load_tdm_groups)
+            self.thread_pool.start(worker)
+
         elif pathlib.Path(self.filename).suffix.lower() == ".zip":
             self.load_PlcLog_file(self.filenames)
             self.file_type = FileType.PLC_LOG
@@ -200,10 +228,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data = item.data(999)
         data["b_unit"] = base_unit
         data["c_unit"] = conc_unit
-
-        item.model().blockSignals(True)
         item.setData(data, 999)
-        item.model().blockSignals(False)
 
     def open_unit_convertion_dialog(self):
         dialog = QtWidgets.QDialog()
@@ -266,16 +291,24 @@ class MainWindow(QtWidgets.QMainWindow):
     def open_context_menu_secondary_y(self, item: QtGui.QStandardItem):
         data = item.data(999)
         data["secondary_y"] = True
-
-        item.model().blockSignals(True)
         item.setData(data, 999)
-        item.model().blockSignals(False)
         item.setCheckState(QtCore.Qt.CheckState.Checked)
 
     def on_double_clicked(self, index: QtCore.QModelIndex):
         """Finds the channel names and adds them to the tree view"""
+        if index.data(999)["node"] != "root":
+            return
+        item = self._tree_view.model().itemFromIndex(index)
+        if item.rowCount() > 0:
+            return
+
         if self.file_type == FileType.TDM:
-            self.handle_tdm_file(index)
+            self.set_load_icon(item)
+            group = index.data(999)["id"]
+            worker = TdmGetChannelsWorker(self.filename, index, group)
+            worker.signals.Channels_Signal.connect(self.load_tdm_channels)
+            self.thread_pool.start(worker)
+
         elif self.file_type == FileType.DAT:
             self.handle_dat_file(index)
 
@@ -295,14 +328,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actionShowNovosProcess.setEnabled(False)
         self.actionShowMMCProcess.setEnabled(True)
 
-    def load_tdm_file(self, filename):
+    def load_tdm_groups(self, groups):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
         self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
-
-        for group in TDMLogReader.get_groups(filename):
+        for group in groups:
             group_node = QtGui.QStandardItem(f"{group}")
             group_node.setEditable(False)
             group_node.setData(dict(id=group, node="root", secondary_y=False), 999)
@@ -311,6 +343,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.actionShowNovosProcess.setEnabled(False)
         self.actionShowMMCProcess.setEnabled(False)
+
+        self.file_type = FileType.TDM
 
     def load_dat_file(self, filename):
         self._standard_model.clear()
@@ -329,19 +363,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
 
-    def handle_tdm_file(self, index: QtCore.QModelIndex):
-        """Handles TDM file type"""
-        if index.data(999)["node"] != "root":
-            return
-        group = index.data(999)["id"]
+    def load_tdm_channels(self, data):
+        index, channels = data
         group_node = self._tree_view.model().itemFromIndex(index)
-        group_node.setEditable(False)
-        channels = TDMLogReader.get_channels(self.filename, group)
+
+
         for ix, name in channels:
             channel_node = self.create_channel_item(name, ix)
-
             group_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
+        self.remove_load_icon(group_node)
 
     def handle_dat_file(self, index: QtCore.QModelIndex):
         """Handles DAT file type"""
@@ -364,7 +395,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = QtGui.QStandardItem(name)
-        channel_node.setData(dict(id=idx, name=name,  node="leaf", secondary_y=False, data_type=data_type), 999)
+        channel_node.setData(dict(id=idx, name=name, node="leaf", secondary_y=False, data_type=data_type), 999)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
         if data_type in [int, float, bool, str]:
@@ -382,22 +413,34 @@ class MainWindow(QtWidgets.QMainWindow):
             return self._remove_trace_by_item_name(item)
 
         if self.file_type == FileType.TDM:
-            self._get_tdm_channel_data(item)
+            self.set_load_icon(item)
+            group = item.parent().data(999)["id"]
+            channel = item.data(999)["id"]
+            worker = TdmGetDataWorker(self.filename, group, channel, item)
+            worker.signals.Data_Signal.connect(self._get_tdm_channel_data)
+            self.thread_pool.start(worker)
         elif self.file_type == FileType.DAT:
             self._get_dat_channel_data(item)
         elif self.file_type == FileType.PLC_LOG:
             self._get_plc_log_channel_data(item)
 
+    def set_load_icon(self, item: QtGui.QStandardItem):
+        item.setEnabled(False)
+        item.setIcon(self._load_icon)
+
+    def remove_load_icon(self, item: QtGui.QStandardItem):
+        item.setEnabled(True)
+        item.setIcon(QtGui.QIcon())
+
     def _get_plc_log_channel_data(self, item):
+        self.remove_load_icon(item)
         df = self.log_file[item.text()]
         df = self._unit_convertion(item, df)
         self._add_scatter_trace_to_fig(df.index, df, item.text())
 
-    def _get_tdm_channel_data(self, item):
-        """Handles changes for TDM items"""
-        group = item.parent().data(999)["id"]
-        channel = item.data(999)["id"]
-        df = TDMLogReader.get_data(self.filename, group, channel)
+    def _get_tdm_channel_data(self, data):
+        item, df = data
+        self.remove_load_icon(item)
         df = self._unit_convertion(item, df)
         self._add_scatter_trace_to_fig(df.index, df, item.text())
 
@@ -452,11 +495,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 secondary_y=item.data(999)["secondary_y"],
             )
 
-        item.model().blockSignals(True)
         data = item.data(999)
         data["secondary_y"] = False
         item.setData(data, 999)
-        item.model().blockSignals(False)
 
     def _dat_select_index(self, df):
         if not df[df.columns[0]].isna().all():
@@ -540,9 +581,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 hf_y=y,
             )
 
-        self.qdask.update_graph(self.fig)
-        self.browser.reload()
-        self.actionShowSignalBrowser.setEnabled(False)
+        if self.thread_pool.activeThreadCount() == 0:
+            self.qdask.update_graph(self.fig)
+            self.browser.reload()
+            self.actionShowSignalBrowser.setEnabled(False)
 
     def _remove_trace_by_item_name(self, item):
         """Removes a trace by given item name"""
