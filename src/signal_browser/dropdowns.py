@@ -12,7 +12,7 @@ from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
 from .plclog_reader import PlcLogReader_Async
 from .tdmlog_reader import TdmGetGroupsWorker, TdmGetChannelsWorker, TdmGetDataWorker
-from .rtilog_reader import RTILogReader
+from .rtilog_reader import RTILogReader, MultiThreaded_RTI_Reader
 from .qt_dash import DashThread
 
 
@@ -458,18 +458,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
-        item_name = item.data(999)["id"]
-        table = item.parent().data(999)["id"]
-        data_type = item.data(999)["data_type"]
+        self.set_load_icon(item)
 
-        new_list = []
-        for filename in self.filenames:
-            if pathlib.Path(filename).suffix.lower() in [".dat", ".db"]:
-                with sqlite3.connect(filename) as dbcon:
-                    df = RTILogReader.get_channel_trace(dbcon, table, item_name)
-                    new_list.append(df)
-        df = pd.concat(new_list)
-        df = self._dat_select_index(df)
+        rti_get_data_threads = MultiThreaded_RTI_Reader(self.filenames, item)
+        rti_get_data_threads.signals.Data_Signal.connect(self._dat_draw_channel_data)
+        self.thread_pool.start(rti_get_data_threads)
+
+    def _dat_draw_channel_data(self, data):
+        item, df = data
+        self.remove_load_icon(item)
+        # df = self._dat_select_index(df)
+        item_name = item.data(999)["id"]
+        data_type = item.data(999)["data_type"]
+        table = item.parent().data(999)["id"]
         df = self._unit_convertion(item, df)
         is_boolean = self._dat_is_boolean(df, item_name)
 
