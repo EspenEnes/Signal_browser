@@ -356,11 +356,11 @@ class MainWindow(QtWidgets.QMainWindow):
             cur = conn.cursor()
             root_node = self._standard_model.invisibleRootItem()
             for table in RTILogReader.get_tables_contains(cur, "rti_json_sample"):
-                if RTILogReader._validate_rti_json_sample(cur, table):
-                    group_node = QtGui.QStandardItem(f"{table}")
-                    group_node.setEditable(False)
-                    group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
-                    root_node.appendRow(group_node)
+                # if RTILogReader._validate_rti_json_sample(cur, table):
+                group_node = QtGui.QStandardItem(f"{table}")
+                group_node.setEditable(False)
+                group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
+                root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
 
