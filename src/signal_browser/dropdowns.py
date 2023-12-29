@@ -293,6 +293,7 @@ class MainWindow(QtWidgets.QMainWindow):
         data["secondary_y"] = True
         item.setData(data, 999)
         item.setCheckState(QtCore.Qt.CheckState.Checked)
+        self.on_channel_checkbox(item)
 
     def on_double_clicked(self, index: QtCore.QModelIndex):
         """Finds the channel names and adds them to the tree view"""
