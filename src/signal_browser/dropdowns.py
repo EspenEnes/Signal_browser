@@ -1,3 +1,4 @@
+import datetime
 import sqlite3
 from enum import Enum, auto
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
@@ -185,7 +186,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.browser.reload()
 
         if pathlib.Path(self.filename).suffix.lower() in [".dat", ".db"]:
-            self.load_dat_file(self.filename)
+            self.load_dat_file(self.filenames)
             self.file_type = FileType.DAT
         elif pathlib.Path(self.filename).suffix.lower() == ".tdm":
             worker = TdmGetGroupsWorker(self.filename)
@@ -347,20 +348,28 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.file_type = FileType.TDM
 
-    def load_dat_file(self, filename):
+    def load_dat_file(self, filenames):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
         self.qdask.update_graph(self.fig)
+        valid_tables = []
 
-        with sqlite3.connect(filename) as conn:
-            cur = conn.cursor()
-            root_node = self._standard_model.invisibleRootItem()
-            for table in RTILogReader.get_tables_contains(cur, "rti_json_sample"):
-                # if RTILogReader._validate_rti_json_sample(cur, table):
-                group_node = QtGui.QStandardItem(f"{table}")
-                group_node.setEditable(False)
-                group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
-                root_node.appendRow(group_node)
+        # read all files and find all tables that contains rti_json_sample that are not none
+        #todo Add this to a thread worker
+        for filename in filenames:
+            with sqlite3.connect(filename) as conn:
+                cur = conn.cursor()
+                for table in RTILogReader.get_tables_contains(cur, "rti_json_sample"):
+                    if RTILogReader._validate_rti_json_sample(cur, table):
+                        if f"{table}" not in valid_tables:
+                            valid_tables.append(f"{table}")
+
+        root_node = self._standard_model.invisibleRootItem()
+        for table in valid_tables:
+            group_node = QtGui.QStandardItem(f"{table}")
+            group_node.setEditable(False)
+            group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
+            root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
 
@@ -382,16 +391,23 @@ class MainWindow(QtWidgets.QMainWindow):
         table = index.data(999)["id"]
         group_node = self._tree_view.model().itemFromIndex(index)
         group_node.setEditable(False)
+        channels = {}
 
-        with sqlite3.connect(self.filename) as conn:
-            cur = conn.cursor()
-            channels = RTILogReader.get_channels_from_rti_json_sample(cur, table)
+
+        #todo Add this to a thread worker
+        self.set_load_icon(group_node)
+        for filename in self.filenames:
+            with sqlite3.connect(filename) as conn:
+                cur = conn.cursor()
+                channels_ = RTILogReader.get_channels_from_rti_json_sample(cur, table)
+                channels.update((k, v) for k, v in channels_.items() if k not in channels)
 
         for key, value in channels.items():
             name = key
             channel_node = self.create_channel_item(name, name, data_type=value)
             group_node.appendRow(channel_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
+        self.remove_load_icon(group_node)
 
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
