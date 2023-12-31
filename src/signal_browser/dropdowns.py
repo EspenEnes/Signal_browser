@@ -1,4 +1,3 @@
-import datetime
 import sqlite3
 from enum import Enum, auto
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
@@ -355,7 +354,7 @@ class MainWindow(QtWidgets.QMainWindow):
         valid_tables = []
 
         # read all files and find all tables that contains rti_json_sample that are not none
-        #todo Add this to a thread worker
+        # todo Add this to a thread worker
         for filename in filenames:
             with sqlite3.connect(filename) as conn:
                 cur = conn.cursor()
@@ -377,7 +376,6 @@ class MainWindow(QtWidgets.QMainWindow):
         index, channels = data
         group_node = self._tree_view.model().itemFromIndex(index)
 
-
         for ix, name in channels:
             channel_node = self.create_channel_item(name, ix)
             group_node.appendRow(channel_node)
@@ -393,8 +391,7 @@ class MainWindow(QtWidgets.QMainWindow):
         group_node.setEditable(False)
         channels = {}
 
-
-        #todo Add this to a thread worker
+        # todo Add this to a thread worker
         self.set_load_icon(group_node)
         for filename in self.filenames:
             with sqlite3.connect(filename) as conn:
@@ -636,6 +633,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.browser.reload()
                     self.actionShowSignalBrowser.setEnabled(False)
                     break
+            if trace.name == f"{table}-{item.text()}":
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
+                self.qdask.update_graph(self.fig)
+                self.browser.reload()
+                self.actionShowSignalBrowser.setEnabled(False)
+                break
 
 
 def main():
