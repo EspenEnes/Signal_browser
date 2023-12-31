@@ -450,13 +450,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.remove_load_icon(item)
         df = self.log_file[item.text()]
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text())
+        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item)
 
     def _get_tdm_channel_data(self, data):
         item, df = data
         self.remove_load_icon(item)
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text())
+        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item)
 
     def _unit_convertion(self, item, df):
         b_unit, c_unit = None, None
@@ -492,11 +492,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if data_type == str:
             y = [f"{table}-{item_name}" for x in df.values]
             self._add_scatter_trace_to_fig(
-                df.index,
-                y,
-                f"{table}-{item_name}",
-                is_str=True,
-                hovertext=df.values,
+                df.index, y, f"{table}-{item_name}", is_str=True, hovertext=df.values, item=item
             )
             self.qdask.update_graph(self.fig)
             self.browser.reload()
@@ -508,6 +504,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 f"{table}-{item_name}",
                 is_boolean=is_boolean,
                 secondary_y=item.data(999)["secondary_y"],
+                item=item,
             )
 
         data = item.data(999)
@@ -538,11 +535,12 @@ class MainWindow(QtWidgets.QMainWindow):
             is_boolean = False
         return is_boolean
 
-    def _add_scatter_trace_to_fig(self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None):
+    def _add_scatter_trace_to_fig(
+        self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None, item=None
+    ):
         """Adds scatter trace to the fig"""
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
             self.fig.add_trace(go.Scatter(mode='lines', name=name), hf_x=x, hf_y=y)
-
 
         elif secondary_y and not is_boolean and not is_str:
             self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3"), hf_x=x, hf_y=y)
@@ -597,50 +595,24 @@ class MainWindow(QtWidgets.QMainWindow):
                 hf_y=y,
             )
 
+        data = item.data(999)
+        data["trace_uid"] = self.fig.data[-1].uid
+        item.setData(data, 999)
+
         if self.thread_pool.activeThreadCount() == 0:
             self.qdask.update_graph(self.fig)
             self.browser.reload()
             self.actionShowSignalBrowser.setEnabled(False)
 
     def _remove_trace_by_item_name(self, item):
-        """Removes a trace by given item name"""
-        for ix, trace in enumerate(self.fig.data):
-            if match := re.findall(r'b>(.+)<i', trace.name):
-                name = match[0].rstrip()
-                name = name.lstrip()
-                if name == item.text():
-                    self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
-                    self.qdask.update_graph(self.fig)
-                    self.browser.reload()
-                    self.actionShowSignalBrowser.setEnabled(False)
-                    break
+        uid = item.data(999)["trace_uid"]
 
-            if trace.name == item.text():
+        for ix, trace in enumerate(self.fig.data):
+            if trace.uid == uid:
                 self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 self.actionShowSignalBrowser.setEnabled(False)
-                break
-
-        item_name = item.data(999)["id"]
-        table = item.parent().data(999)["id"]
-        for ix, trace in enumerate(self.fig.data):
-            if match := re.findall(r'b>(.+)<i', trace.name):
-                name = match[0].rstrip()
-                name = name.lstrip()
-                if name == f"{table}-{item_name}":
-                    self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
-                    self.qdask.update_graph(self.fig)
-                    self.browser.reload()
-                    self.actionShowSignalBrowser.setEnabled(False)
-                    break
-            if trace.name == f"{table}-{item.text()}":
-                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
-                self.qdask.update_graph(self.fig)
-                self.browser.reload()
-                self.actionShowSignalBrowser.setEnabled(False)
-                break
-
 
 def main():
     """Main function"""
