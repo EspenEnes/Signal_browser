@@ -185,7 +185,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.browser.reload()
 
         if pathlib.Path(self.filename).suffix.lower() in [".dat", ".db"]:
-            self.load_dat_file(self.filenames)
+            self.load_dat_groups(self.filenames)
             self.file_type = FileType.DAT
         elif pathlib.Path(self.filename).suffix.lower() == ".tdm":
             worker = TdmGetGroupsWorker(self.filename)
@@ -311,7 +311,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.thread_pool.start(worker)
 
         elif self.file_type == FileType.DAT:
-            self.handle_dat_file(index)
+            self.load_dat_channels(index)
 
     def load_PlcLog_file(self, filename):
         self.log_file = PlcLogReader_Async.read_logfile(filename)
@@ -347,7 +347,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.file_type = FileType.TDM
 
-    def load_dat_file(self, filenames):
+    def load_dat_groups(self, filenames):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
         self.qdask.update_graph(self.fig)
@@ -382,7 +382,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.remove_load_icon(group_node)
 
-    def handle_dat_file(self, index: QtCore.QModelIndex):
+    def load_dat_channels(self, index: QtCore.QModelIndex):
         """Handles DAT file type"""
         if index.data(999)["node"] != "root":
             return
@@ -542,6 +542,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Adds scatter trace to the fig"""
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
             self.fig.add_trace(go.Scatter(mode='lines', name=name), hf_x=x, hf_y=y)
+
 
         elif secondary_y and not is_boolean and not is_str:
             self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3"), hf_x=x, hf_y=y)
