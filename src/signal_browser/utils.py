@@ -3,7 +3,7 @@ import io
 import json
 import math
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import BinaryIO
 
 import pandas as pd
@@ -135,7 +135,7 @@ class TimeConversionUtils:
         """
         if isinstance(data, str):
             data = json.loads(data)
-        return datetime.fromtimestamp(data["sec"]) + timedelta(microseconds=data["nanosec"] / 1000)
+        return datetime.fromtimestamp(data["sec"], timezone.utc) + timedelta(microseconds=data["nanosec"] / 1000)
 
     @staticmethod
     def unixtime_ns_to_datetime(ns_value: int) -> datetime:
@@ -156,9 +156,7 @@ class TimeConversionUtils:
         Output:
             2021-01-01 00:00:00
         """
-        return datetime.fromtimestamp(ns_value / 1e9)
-
-
+        return datetime.fromtimestamp(ns_value / 1e9, timezone.utc)
 
 
 def retain_changed_values(df: pd.DataFrame):
@@ -176,6 +174,7 @@ def retain_changed_values(df: pd.DataFrame):
     for col in df:
         output[col] = retain_changed_values_on_series
     return pd.DataFrame(output)
+
 
 def retain_changed_values_on_series(data: pd.Series):
     """
@@ -202,6 +201,7 @@ def read_struct_from_binary(binary: BinaryIO):
     bufferd = binary.read(length)
     struct = bufferd.decode("ANSI")
     return struct
+
 
 def zipfile_from_bytes(content_bytes):
     """
