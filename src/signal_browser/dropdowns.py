@@ -4,10 +4,9 @@ from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
 import pandas as pd
 import pathlib
 import plotly.graph_objects as go
-import re
 import pint
 
-
+from .custom_standard_model import CustomStandardItemModel, MyStandardItem
 from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
 from .plclog_reader import PlcLogReader_Async
@@ -17,6 +16,10 @@ from .qt_dash import DashThread
 
 
 class FileType(Enum):
+    """
+    FileType is an enumeration class that represents different types of file formats.
+    """
+
     TDM = auto()
     DAT = auto()
     DB = auto()
@@ -25,46 +28,37 @@ class FileType(Enum):
 
 
 class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
+    """
+    Class: ColorizeDelegate
+
+        An item delegate class for colorizing the background and text of items in a view.
+
+    Inherits from:
+        QtWidgets.QStyledItemDelegate
+
+    Methods:
+        initStyleOption(option, index)
+            - Initializes the style options for the item at the given index.
+    """
+
     def initStyleOption(self, option, index):
         super().initStyleOption(option, index)
+        item = option.widget.model().itemFromIndex(index)
 
-        data = index.data(999)
-        if not isinstance(data, dict):
-            return
-
-        b_unit = data.get('b_unit')
-        c_unit = data.get('c_unit')
-        name = data.get('name')
+        b_unit = item.itemData.b_unit
+        c_unit = item.itemData.c_unit
+        name = item.itemData.name
 
         if b_unit and c_unit and name:
             option.backgroundBrush = QtGui.QColor('Yellow')
-            option.text = f'{data["name"]} [{data["b_unit"]}->{data["c_unit"]}]'
-
-
-class CustomStandardItemModel(QtGui.QStandardItemModel):
-    """Reimplementation of QStandardItemmodel so it can filer out CheckStateRoles"""
-
-    checkStateChanged = QtCore.Signal(QtGui.QStandardItem)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-    def data(self, index, role=QtCore.Qt.ItemDataRole.DisplayRole):
-        return super().data(index, role)
-
-    def setData(self, index, value, role=QtCore.Qt.ItemDataRole.DisplayRole):
-        state = self.data(index, QtCore.Qt.ItemDataRole.CheckStateRole)
-
-        if role == QtCore.Qt.ItemDataRole.CheckStateRole and state != value:
-            item = self.itemFromIndex(index)
-            result = super().setData(index, value, role)
-            self.checkStateChanged.emit(item)
-            return result
-
-        return super().setData(index, value, role)
+            option.text = f'{name} [{b_unit}->{c_unit}]'
 
 
 class MainWindow(QtWidgets.QMainWindow):
+    """
+    The MainWindow class represents the main window of the application. It inherits from the QtWidgets.QMainWindow class.
+    """
+
     def __init__(self, parent=None, port=8050):
         super().__init__(parent)
         self.resize(800, 600)
@@ -202,9 +196,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if not index.isValid():
             return
 
-        # Check if the item is a channel
-        if index.data(999)["node"] != "leaf":
-            # It's a root item, not a child item
+        item = self._tree_view.model().itemFromIndex(index)
+
+        if item.itemData.node != "leaf":
             return
 
         item = self._tree_view.model().itemFromIndex(index)
@@ -219,16 +213,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if item.checkState() == QtCore.Qt.CheckState.Checked:
             action2.setEnabled(False)
 
+        if item.itemData.data_type == str:
+            action2.setEnabled(False)
+
         # Show the context menu
         menu.exec_(self._tree_view.viewport().mapToGlobal(position))
 
-    def unit_convertion(self, item):
+    def unit_convertion(self, item: MyStandardItem):
+        print(item.itemData.data_type)
         base_unit, conc_unit = self.open_unit_convertion_dialog()
-
-        data = item.data(999)
-        data["b_unit"] = base_unit
-        data["c_unit"] = conc_unit
-        item.setData(data, 999)
+        item.setItemData(b_unit=base_unit, c_unit=conc_unit)
 
     def open_unit_convertion_dialog(self):
         dialog = QtWidgets.QDialog()
@@ -288,24 +282,24 @@ class MainWindow(QtWidgets.QMainWindow):
             return None, None
         return None, None
 
-    def open_context_menu_secondary_y(self, item: QtGui.QStandardItem):
-        data = item.data(999)
-        data["secondary_y"] = True
-        item.setData(data, 999)
+    def open_context_menu_secondary_y(self, item: MyStandardItem):
+        item.itemData.secondary_y = True
         item.setCheckState(QtCore.Qt.CheckState.Checked)
         self.on_channel_checkbox(item)
 
     def on_double_clicked(self, index: QtCore.QModelIndex):
         """Finds the channel names and adds them to the tree view"""
-        if index.data(999)["node"] != "root":
-            return
         item = self._tree_view.model().itemFromIndex(index)
+
+        if item.itemData.node != "root":
+            return
+
         if item.rowCount() > 0:
             return
 
         if self.file_type == FileType.TDM:
             self.set_load_icon(item)
-            group = index.data(999)["id"]
+            group = item.itemData.id
             worker = TdmGetChannelsWorker(self.filename, index, group)
             worker.signals.Channels_Signal.connect(self.load_tdm_channels)
             self.thread_pool.start(worker)
@@ -336,9 +330,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root_node = self._standard_model.invisibleRootItem()
         for group in groups:
-            group_node = QtGui.QStandardItem(f"{group}")
+            group_node = MyStandardItem(f"{group}")
             group_node.setEditable(False)
-            group_node.setData(dict(id=group, node="root", secondary_y=False), 999)
+            group_node.setItemData(id=group, node="root", secondary_y=False)
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -365,9 +359,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root_node = self._standard_model.invisibleRootItem()
         for table in valid_tables:
-            group_node = QtGui.QStandardItem(f"{table}")
+            group_node = MyStandardItem(f"{table}")
             group_node.setEditable(False)
-            group_node.setData(dict(id=table, node="root", secondary_y=False), 999)
+            group_node.setItemData(id=table, node="root", secondary_y=False)
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
@@ -384,9 +378,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_dat_channels(self, index: QtCore.QModelIndex):
         """Handles DAT file type"""
-        if index.data(999)["node"] != "root":
+        item = self._tree_view.model().itemFromIndex(index)
+
+        if item.itemData.node != "root":
             return
-        table = index.data(999)["id"]
+        table = item.itemData.id
         group_node = self._tree_view.model().itemFromIndex(index)
         group_node.setEditable(False)
         channels = {}
@@ -408,8 +404,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
-        channel_node = QtGui.QStandardItem(name)
-        channel_node.setData(dict(id=idx, name=name, node="leaf", secondary_y=False, data_type=data_type), 999)
+        channel_node = MyStandardItem(name)
+        channel_node.setItemData(id=idx, name=name, node="leaf", secondary_y=False, data_type=data_type)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
         if data_type in [int, float, bool, str]:
@@ -418,7 +414,7 @@ class MainWindow(QtWidgets.QMainWindow):
             channel_node.setEnabled(False)
         return channel_node
 
-    def on_channel_checkbox(self, item):
+    def on_channel_checkbox(self, item: MyStandardItem):
         """Adds the traces to the graph if the item is checked"""
         if not item.isCheckable():
             return
@@ -428,8 +424,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.file_type == FileType.TDM:
             self.set_load_icon(item)
-            group = item.parent().data(999)["id"]
-            channel = item.data(999)["id"]
+            group = item.parent().id
+            channel = item.id
             worker = TdmGetDataWorker(self.filename, group, channel, item)
             worker.signals.Data_Signal.connect(self._get_tdm_channel_data)
             self.thread_pool.start(worker)
@@ -438,11 +434,11 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.file_type == FileType.PLC_LOG:
             self._get_plc_log_channel_data(item)
 
-    def set_load_icon(self, item: QtGui.QStandardItem):
+    def set_load_icon(self, item: MyStandardItem):
         item.setEnabled(False)
         item.setIcon(self._load_icon)
 
-    def remove_load_icon(self, item: QtGui.QStandardItem):
+    def remove_load_icon(self, item: MyStandardItem):
         item.setEnabled(True)
         item.setIcon(QtGui.QIcon())
 
@@ -459,14 +455,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item)
 
     def _unit_convertion(self, item, df):
-        b_unit, c_unit = None, None
-        if "b_unit" in item.data(999):
-            b_unit = item.data(999)["b_unit"]
-        if "c_unit" in item.data(999):
-            c_unit = item.data(999)["c_unit"]
+        b_unit = item.itemData.b_unit
+        c_unit = item.itemData.c_unit
+        print(b_unit, c_unit)
         if b_unit and c_unit:
-            a = df.to_numpy() * self.ureg[b_unit]
-            a = a.to(self.ureg[c_unit])
+            a = df.to_numpy() * self.ureg[str(b_unit)]
+            a = a.to(self.ureg[str(c_unit)])
             df = pd.Series(a, df.index)
         return df
 
@@ -481,10 +475,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _dat_draw_channel_data(self, data):
         item, df = data
         self.remove_load_icon(item)
-        # df = self._dat_select_index(df)
-        item_name = item.data(999)["id"]
-        data_type = item.data(999)["data_type"]
-        table = item.parent().data(999)["id"]
+        item_name = item.itemData.id
+        data_type = item.itemData.data_type
+        table = item.parent().itemData.id
         df = self._unit_convertion(item, df)
         is_boolean = self._dat_is_boolean(df, item_name)
 
@@ -503,13 +496,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 df,
                 f"{table}-{item_name}",
                 is_boolean=is_boolean,
-                secondary_y=item.data(999)["secondary_y"],
+                secondary_y=item.itemData.secondary_y,
                 item=item,
             )
 
-        data = item.data(999)
-        data["secondary_y"] = False
-        item.setData(data, 999)
+        item.itemData.secondary_y = False
 
     def _dat_select_index(self, df):
         if not df[df.columns[0]].isna().all():
@@ -595,9 +586,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 hf_y=y,
             )
 
-        data = item.data(999)
-        data["trace_uid"] = self.fig.data[-1].uid
-        item.setData(data, 999)
+        item.itemData.trace_uid = self.fig.data[-1].uid
 
         if self.thread_pool.activeThreadCount() == 0:
             self.qdask.update_graph(self.fig)
@@ -605,7 +594,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.actionShowSignalBrowser.setEnabled(False)
 
     def _remove_trace_by_item_name(self, item):
-        uid = item.data(999)["trace_uid"]
+        uid = item.itemData.trace_uid
 
         for ix, trace in enumerate(self.fig.data):
             if trace.uid == uid:
@@ -613,6 +602,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 self.actionShowSignalBrowser.setEnabled(False)
+
 
 def main():
     """Main function"""
