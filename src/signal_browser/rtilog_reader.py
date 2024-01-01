@@ -98,8 +98,8 @@ class MultiThreaded_RTI_Reader(QRunnable):
         self.threadpool.setMaxThreadCount(100)
         self.filenames = filenames
         self.item = item
-        self.item_name = item.data(999)["id"]
-        self.table = item.parent().data(999)["id"]
+        self.item_name = item.itemData.id
+        self.table = item.parent().itemData.id
 
         self.mutex = QMutex()
         self.df_list = []
