@@ -18,7 +18,7 @@ class ItemData:
     c_unit: str = None
     trace_uid: str = None
 
-class MyStandardItem(QStandardItem):
+class CustomStandardItem(QStandardItem):
     """
     Subclass of QStandardItem that extends the functionality to store additional data.
 
@@ -70,7 +70,7 @@ class CustomStandardItemModel(QtGui.QStandardItemModel):
 
     """
 
-    checkStateChanged = QtCore.Signal(MyStandardItem)
+    checkStateChanged = QtCore.Signal(CustomStandardItem)
 
     def __init__(self, parent=None):
         super().__init__(parent)

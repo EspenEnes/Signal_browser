@@ -6,7 +6,7 @@ import pathlib
 import plotly.graph_objects as go
 import pint
 
-from .custom_standard_model import CustomStandardItemModel, MyStandardItem
+from .my_custom_classes import CustomStandardItemModel, CustomStandardItem
 from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
 from .plclog_reader import PlcLogReader_Async
@@ -219,7 +219,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Show the context menu
         menu.exec_(self._tree_view.viewport().mapToGlobal(position))
 
-    def unit_convertion(self, item: MyStandardItem):
+    def unit_convertion(self, item: CustomStandardItem):
         print(item.itemData.data_type)
         base_unit, conc_unit = self.open_unit_convertion_dialog()
         item.setItemData(b_unit=base_unit, c_unit=conc_unit)
@@ -282,7 +282,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return None, None
         return None, None
 
-    def open_context_menu_secondary_y(self, item: MyStandardItem):
+    def open_context_menu_secondary_y(self, item: CustomStandardItem):
         item.itemData.secondary_y = True
         item.setCheckState(QtCore.Qt.CheckState.Checked)
         self.on_channel_checkbox(item)
@@ -330,7 +330,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root_node = self._standard_model.invisibleRootItem()
         for group in groups:
-            group_node = MyStandardItem(f"{group}")
+            group_node = CustomStandardItem(f"{group}")
             group_node.setEditable(False)
             group_node.setItemData(id=group, node="root", secondary_y=False)
             root_node.appendRow(group_node)
@@ -359,7 +359,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         root_node = self._standard_model.invisibleRootItem()
         for table in valid_tables:
-            group_node = MyStandardItem(f"{table}")
+            group_node = CustomStandardItem(f"{table}")
             group_node.setEditable(False)
             group_node.setItemData(id=table, node="root", secondary_y=False)
             root_node.appendRow(group_node)
@@ -404,7 +404,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
-        channel_node = MyStandardItem(name)
+        channel_node = CustomStandardItem(name)
         channel_node.setItemData(id=idx, name=name, node="leaf", secondary_y=False, data_type=data_type)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
@@ -414,7 +414,7 @@ class MainWindow(QtWidgets.QMainWindow):
             channel_node.setEnabled(False)
         return channel_node
 
-    def on_channel_checkbox(self, item: MyStandardItem):
+    def on_channel_checkbox(self, item: CustomStandardItem):
         """Adds the traces to the graph if the item is checked"""
         if not item.isCheckable():
             return
@@ -434,11 +434,11 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.file_type == FileType.PLC_LOG:
             self._get_plc_log_channel_data(item)
 
-    def set_load_icon(self, item: MyStandardItem):
+    def set_load_icon(self, item: CustomStandardItem):
         item.setEnabled(False)
         item.setIcon(self._load_icon)
 
-    def remove_load_icon(self, item: MyStandardItem):
+    def remove_load_icon(self, item: CustomStandardItem):
         item.setEnabled(True)
         item.setIcon(QtGui.QIcon())
 
