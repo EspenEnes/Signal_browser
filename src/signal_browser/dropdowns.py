@@ -145,6 +145,16 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def show_novos_process(self):
         self.fig2 = NOVOSProcesses.make_plotly_figure(self.filenames)
+        if not self.fig2:
+            dialog = QtWidgets.QDialog()
+            dialog.setWindowTitle("No Data")
+            layout = QtWidgets.QVBoxLayout()
+            label = QtWidgets.QLabel(dialog)
+            label.setText("There is no Novos Process data to show.")
+            layout.addWidget(label)
+            dialog.setLayout(layout)
+            dialog.exec()
+            return
 
         self.qdask.update_progress(self.fig2)
         self.browser.reload()

@@ -24,6 +24,9 @@ class NOVOSProcesses:
         """
         timeline_data = cls.make_timeline_data(filenames)
 
+        if not timeline_data:
+            return None
+
         fig = px.timeline(
             timeline_data, x_start="Start", x_end="Finish", y="Task", color="Resource", custom_data="custom"
         )
@@ -36,7 +39,6 @@ class NOVOSProcesses:
 
     @classmethod
     def make_timeline_data(cls, filenames: list[str]):
-
         query = f"""SELECT json_extract(rti_json_sample, '$.timestamp'),
         json_extract(rti_json_sample, '$.phase'),
         json_extract(rti_json_sample, '$.subPhase'),
@@ -48,8 +50,8 @@ class NOVOSProcesses:
         processes = cls._process_df_rows_to_processes(df)
         gannt = cls._process_data_to_gannt(processes)
 
-        if not gannt:
-            return
+        if len(gannt) == 0:
+            return None
 
         return gannt
 
