@@ -402,6 +402,10 @@ class MainWindow(QtWidgets.QMainWindow):
         for filename in self.filenames:
             with sqlite3.connect(filename) as conn:
                 cur = conn.cursor()
+                tables = RTILogReader.get_all_tables(cur)
+                if table not in tables:
+                    continue
+
                 channels_ = RTILogReader.get_channels_from_rti_json_sample(cur, table)
                 channels.update((k, v) for k, v in channels_.items() if k not in channels)
 

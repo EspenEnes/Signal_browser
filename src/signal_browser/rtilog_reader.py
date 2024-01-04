@@ -32,7 +32,7 @@ class RTILogReader:
         query = f"SELECT rti_json_sample FROM '{table}';"
         cur.execute(query)
         data = cur.fetchone()
-        if data is not None:
+        if data is not None and data[0] is not None:
             channels = json.loads(data[0])
             for key, value in channels.items():
                 channels[key] = type(value)
@@ -83,11 +83,14 @@ class SingleFile_RTI_DataReader(QRunnable):
 
     def run(self):
         with sqlite3.connect(self.filename) as dbcon:
-            df = RTILogReader.get_channel_trace(dbcon, self.table, self.item_name)
+            cur = dbcon.cursor()
+            tables = RTILogReader.get_all_tables(cur)
+            if self.table in tables:
+                df = RTILogReader.get_channel_trace(dbcon, self.table, self.item_name)
 
-        self.mutex.lock()
-        self.df_list.append(df)
-        self.mutex.unlock()
+                self.mutex.lock()
+                self.df_list.append(df)
+                self.mutex.unlock()
 
 
 class MultiThreaded_RTI_Reader(QRunnable):
