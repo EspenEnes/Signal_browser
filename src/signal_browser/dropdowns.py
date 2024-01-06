@@ -258,7 +258,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             unit1, unit2 = self.validate_unit_convertion(input1.text(), input2.text())
             if (
-                (unit1 is not None) and (unit2 is not None) and (unit1 != "") and (unit2 != "")
+                    (unit1 is not None) and (unit2 is not None) and (unit1 != "") and (unit2 != "")
             ):  # todo This looks like shit
                 return unit1, unit2
             else:
@@ -438,8 +438,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.file_type == FileType.TDM:
             self.set_load_icon(item)
-            group = item.parent().id
-            channel = item.id
+            group = item.parent().itemData.id
+            channel = item.itemData.id
             worker = TdmGetDataWorker(self.filename, group, channel, item)
             worker.signals.Data_Signal.connect(self._get_tdm_channel_data)
             self.thread_pool.start(worker)
@@ -541,7 +541,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return is_boolean
 
     def _add_scatter_trace_to_fig(
-        self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None, item=None
+            self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None, item=None
     ):
         """Adds scatter trace to the fig"""
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
@@ -612,7 +612,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         for ix, trace in enumerate(self.fig.data):
             if trace.uid == uid:
-                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1 :]
+                self.fig.data = self.fig.data[:ix] + self.fig.data[ix + 1:]
                 self.qdask.update_graph(self.fig)
                 self.browser.reload()
                 self.actionShowSignalBrowser.setEnabled(False)
