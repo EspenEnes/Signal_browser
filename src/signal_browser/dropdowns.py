@@ -460,7 +460,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.remove_load_icon(item)
         df = self.log_file[item.text()]
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item)
+        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item, secondary_y=item.itemData.secondary_y)
+        item.itemData.secondary_y = False
 
     def _get_tdm_channel_data(self, data):
         item, df = data
