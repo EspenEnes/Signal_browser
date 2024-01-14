@@ -141,7 +141,11 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_signal_browser(self):
         self.qdask.update_graph(self.fig)
         self.browser.reload()
-        self.actionShowNovosProcess.setEnabled(True)
+
+        if self.file_type == FileType.PLC_LOG:
+            self.actionShowMMCProcess.setEnabled(True)
+        else:
+            self.actionShowNovosProcess.setEnabled(True)
 
     def show_novos_process(self):
         self.fig2 = NOVOSProcesses.make_plotly_figure(self.filenames)
