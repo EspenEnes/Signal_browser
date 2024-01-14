@@ -244,7 +244,6 @@ class MMCProcesses:
 
     @classmethod
     def select_sequence_enum(cls, machine_id):
-        print(machine_id)
         try:
             if Machine_ID(machine_id) == Machine_ID.TDDW:
                 return TDDW
