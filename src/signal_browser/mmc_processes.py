@@ -126,6 +126,7 @@ class MMCProcesses:
         output = []
         old = None
         start = None
+        end = None
         df = retain_changed_values_on_series(df_seq)
         for timestamp, seq_id in df.dropna().items():
             if old != seq_id:
@@ -157,6 +158,13 @@ class MMCProcesses:
                     seq_id = None
                     end = None
             old = seq_id
+
+        if start and not end:
+            """If task is not ended on last iteration of the data, end task"""
+            end = df_seq.index[-1]
+            tasks = cls._find_start_stop_of_steps(machine_id, df_steps, seq_id, start, end)
+            output.extend(tasks)
+
         return output
 
     @classmethod
@@ -236,6 +244,7 @@ class MMCProcesses:
 
     @classmethod
     def select_sequence_enum(cls, machine_id):
+        print(machine_id)
         try:
             if Machine_ID(machine_id) == Machine_ID.TDDW:
                 return TDDW

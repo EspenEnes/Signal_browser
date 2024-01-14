@@ -13,6 +13,12 @@ class TDDW(enum.IntEnum):
     TDDW_Disconnect = 108
     TDDW_FillPipe_TripIn = 109
     TDDW_PumpOut = 110
+    TDDW_SetWeightStickup = 113
+    TDDW_TakeWeightHandover =116
+    TDDW_LatchHhandover = 118
+    TDDW_Unlatchtickup = 119
+    TDDW_GetHandover = 121
+
 
 class HR(enum.IntEnum):
     HR_TripIn = 1
