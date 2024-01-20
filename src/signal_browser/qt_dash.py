@@ -3,7 +3,7 @@ from PySide6 import QtCore
 import plotly.graph_objects as go
 from dash import no_update
 from plotly_resampler import FigureResampler
-import trace_updater
+
 
 
 class DashThread(QtCore.QThread):
@@ -41,7 +41,6 @@ class DashThread(QtCore.QThread):
                     style={'height': '100vh'},
                     config={"scrollZoom": True},
                 ),
-                # trace_updater.TraceUpdater(id="trace-updater", gdID="fig"),
             ],
             style={'height': '100vh'},
         )
@@ -57,7 +56,6 @@ class DashThread(QtCore.QThread):
                     style={'height': '100vh'},
                     config={"scrollZoom": True},
                 ),
-                trace_updater.TraceUpdater(id="trace-updater", gdID="fig"),
             ],
             style={'height': '100vh'},
         )
