@@ -19,6 +19,12 @@ class DashThread(QtCore.QThread):
         self.fig = FigureResampler(go.Figure(), default_n_shown_samples=2500)
         self.fig.update_xaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray', minor_griddash="dot")
         self.fig.update_yaxes(minor_showgrid=True, gridwidth=1, gridcolor='lightgray', minor_griddash="dot")
+        self.fig.update_layout(legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            xanchor="right",
+            x=1
+        ))
 
         self.fig.register_update_graph_callback(app=self._app, graph_id="fig", trace_updater_id="trace-updater")
 

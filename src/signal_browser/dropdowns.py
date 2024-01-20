@@ -92,6 +92,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.qdask.start()
         self._tree_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 
+
     def create_layout(self):
         """Creates the layout for the main window"""
         self.splitter = QtWidgets.QSplitter(self)
@@ -326,16 +327,24 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._standard_model.clear()
         self.fig.replace(go.Figure())
+        self.fig.update_layout(legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ))
         self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
         for channel in self.log_file.columns:
             channel_node = self.create_channel_item(channel, channel)
             root_node.appendRow(channel_node)
-        self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
+        self._standard_model.setHorizontalHeaderLabels(["Signals"])
 
         self.actionShowNovosProcess.setEnabled(False)
         self.actionShowMMCProcess.setEnabled(True)
+        self._tree_view.setSortingEnabled(True)
 
     def load_tdm_groups(self, groups):
         self._standard_model.clear()
@@ -352,6 +361,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.actionShowNovosProcess.setEnabled(False)
         self.actionShowMMCProcess.setEnabled(False)
+        self._tree_view.setSortingEnabled(False)
 
         self.file_type = FileType.TDM
 
@@ -379,6 +389,7 @@ class MainWindow(QtWidgets.QMainWindow):
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
+        self._tree_view.setSortingEnabled(False)
 
     def load_tdm_channels(self, data):
         index, channels = data

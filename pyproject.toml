@@ -36,7 +36,8 @@ dependencies = [
 "pandas",
 "tdm-loader",
 "plotly-resampler",
-"pint"
+"pint",
+"trace-updater"
 ]
 
 [project.gui-scripts]
