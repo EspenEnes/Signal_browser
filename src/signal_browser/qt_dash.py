@@ -74,6 +74,8 @@ class DashThread(QtCore.QThread):
                     anchor="free",
                     overlaying='y',
                     autoshift=True,
+                    showgrid=False,
+                    minor_showgrid=False,
                 )
 
             return fig
