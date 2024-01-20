@@ -26,7 +26,7 @@ class DashThread(QtCore.QThread):
             x=1
         ))
 
-        self.fig.register_update_graph_callback(app=self._app, graph_id="fig", trace_updater_id="trace-updater")
+        self.fig.register_update_graph_callback(app=self._app, graph_id="fig", coarse_graph_id="trace-updater")
 
         self.update_graph(self.fig)
 
