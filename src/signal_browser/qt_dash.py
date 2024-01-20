@@ -65,7 +65,18 @@ class DashThread(QtCore.QThread):
     )
     def multiplot(n_clicks, fig):
         if fig and n_clicks:
-            pass
+            fig['data'][0]['yaxis'] = 'y'
+            for ix, data in enumerate(fig['data'][0:], start=1):
+                data['yaxis'] = f'y{ix}'
+                fig['layout'][f'yaxis{ix}'] = dict(
+                    # color="yellow",
+                    side='left',
+                    anchor="free",
+                    overlaying='y',
+                    autoshift=True,
+                )
+
+            return fig
 
         return no_update
 

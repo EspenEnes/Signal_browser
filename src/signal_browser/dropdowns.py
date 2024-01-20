@@ -349,6 +349,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_tdm_groups(self, groups):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
+        self.fig.update_layout(legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ))
         self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
@@ -368,6 +375,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_dat_groups(self, filenames):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
+        self.fig.update_layout(legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ))
         self.qdask.update_graph(self.fig)
         valid_tables = []
 
@@ -482,7 +496,7 @@ class MainWindow(QtWidgets.QMainWindow):
         item, df = data
         self.remove_load_icon(item)
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item)
+        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item, secondary_y=item.itemData.secondary_y)
 
     def _unit_convertion(self, item, df):
         b_unit = item.itemData.b_unit
