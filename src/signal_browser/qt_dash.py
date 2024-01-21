@@ -1,6 +1,7 @@
 import dash
 from PySide6 import QtCore
 import plotly.graph_objects as go
+import plotly.express as px
 from dash import no_update
 from plotly_resampler import FigureResampler
 
@@ -65,17 +66,25 @@ class DashThread(QtCore.QThread):
     )
     def multiplot(n_clicks, fig):
         if fig and n_clicks:
+            colors = px.colors.qualitative.Plotly
             fig['data'][0]['yaxis'] = 'y'
+            fig['layout'][f'yaxis'] = dict(
+                color=colors[0],
+                tickformat = '.3s'
+            )
             for ix, data in enumerate(fig['data'][0:], start=1):
                 data['yaxis'] = f'y{ix}'
+                # print(data.line.color)
+
                 fig['layout'][f'yaxis{ix}'] = dict(
-                    # color="yellow",
+                    color=colors[ix-1 - len(colors) * (ix // len(colors))],
                     side='left',
                     anchor="free",
                     overlaying='y',
                     autoshift=True,
                     showgrid=False,
                     minor_showgrid=False,
+                    tickformat='.3s'
                 )
 
             return fig
