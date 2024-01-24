@@ -6,6 +6,12 @@ from dash import no_update
 from plotly_resampler import FigureResampler
 
 
+def fetch_color(data, index):
+    colors = px.colors.qualitative.Plotly
+    if "line" in data and data["line"]["color"]:
+        return data["line"]["color"]
+    return colors[index - len(colors) * (index // len(colors))]
+
 
 class DashThread(QtCore.QThread):
     """A thread that runs a dash app"""
@@ -65,37 +71,29 @@ class DashThread(QtCore.QThread):
         dash.Output('fig', 'figure'), dash.Input('multiplot-button', 'n_clicks'), dash.State('fig', 'figure')
     )
     def multiplot(n_clicks, fig):
+        """multi-plot graph where each data series has its y-axis and corresponding color"""
         if fig and n_clicks:
-            colors = px.colors.qualitative.Plotly
-
-            color = colors[0]
-            if "line" in fig['data'][0]:
-                if fig['data'][0]['line']['color']:
-                    color = fig['data'][0]['line']['color']
-
-            fig['data'][0]['yaxis'] = 'y'
-            fig['layout'][f'yaxis'] = dict(
-                color=color,
-                tickformat = '.3s'
-            )
-            for ix, data in enumerate(fig['data'][0:], start=1):
-                color = colors[ix-1 - len(colors) * (ix // len(colors))]
-                if "line" in data:
-                    if data['line']['color']:
-                        color = data['line']['color']
-
-                data['yaxis'] = f'y{ix}'
-
-                fig['layout'][f'yaxis{ix}'] = dict(
-                    color=color,
-                    side='left',
-                    anchor="free",
-                    overlaying='y',
-                    autoshift=True,
-                    showgrid=False,
-                    minor_showgrid=False,
-                    tickformat='.3s'
-                )
+            for ix, data in enumerate(fig['data']):
+                if ix == 0:
+                    color = fetch_color(data, ix)
+                    data['yaxis'] = 'y'
+                    fig['layout'][f'yaxis'] = dict(
+                        color=color,
+                        tickformat='.3s'
+                    )
+                else:
+                    color = fetch_color(data, ix)
+                    data['yaxis'] = f'y{ix + 1}'
+                    fig['layout'][f'yaxis{ix + 1}'] = dict(
+                        color=color,
+                        side='left',
+                        anchor="free",
+                        overlaying='y',
+                        autoshift=True,
+                        showgrid=False,
+                        minor_showgrid=False,
+                        tickformat='.3s'
+                    )
 
             return fig
 
