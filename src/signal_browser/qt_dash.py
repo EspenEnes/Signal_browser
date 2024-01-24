@@ -74,7 +74,6 @@ class DashThread(QtCore.QThread):
             )
             for ix, data in enumerate(fig['data'][0:], start=1):
                 data['yaxis'] = f'y{ix}'
-                # print(data.line.color)
 
                 fig['layout'][f'yaxis{ix}'] = dict(
                     color=colors[ix-1 - len(colors) * (ix // len(colors))],

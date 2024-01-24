@@ -12,6 +12,13 @@
 
 ## Installation
 
+If we are behind a strict VPN, we need to install thruststore certificates
+```console
+pip install truststore
+pip install git+https://github.com/EspenEnes/Signal_browser.git --use-feature=truststore
+
+```
+
 ```console
 pip install git+https://github.com/EspenEnes/Signal_browser.git
 ```
