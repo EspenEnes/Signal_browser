@@ -17,6 +17,7 @@ class ItemData:
     b_unit: str = None
     c_unit: str = None
     trace_uid: str = None
+    costum_color: str = None
 
 class CustomStandardItem(QStandardItem):
     """

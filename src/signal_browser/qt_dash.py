@@ -67,16 +67,27 @@ class DashThread(QtCore.QThread):
     def multiplot(n_clicks, fig):
         if fig and n_clicks:
             colors = px.colors.qualitative.Plotly
+
+            color = colors[0]
+            if "line" in fig['data'][0]:
+                if fig['data'][0]['line']['color']:
+                    color = fig['data'][0]['line']['color']
+
             fig['data'][0]['yaxis'] = 'y'
             fig['layout'][f'yaxis'] = dict(
-                color=colors[0],
+                color=color,
                 tickformat = '.3s'
             )
             for ix, data in enumerate(fig['data'][0:], start=1):
+                color = colors[ix-1 - len(colors) * (ix // len(colors))]
+                if "line" in data:
+                    if data['line']['color']:
+                        color = data['line']['color']
+
                 data['yaxis'] = f'y{ix}'
 
                 fig['layout'][f'yaxis{ix}'] = dict(
-                    color=colors[ix-1 - len(colors) * (ix // len(colors))],
+                    color=color,
                     side='left',
                     anchor="free",
                     overlaying='y',

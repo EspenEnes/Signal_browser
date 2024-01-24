@@ -53,6 +53,9 @@ class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
             option.backgroundBrush = QtGui.QColor('Yellow')
             option.text = f'{name} [{b_unit}->{c_unit}]'
 
+        # if item.itemData.costum_color:
+        #     option.backgroundBrush = QtGui.QColor(item.itemData.costum_color)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """
@@ -221,8 +224,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         action1 = menu.addAction("Select and add to secondary axis")
         action2 = menu.addAction("Unit Conversion")
+        action3 = menu.addAction("Pen Color")
         action1.triggered.connect(lambda: self.open_context_menu_secondary_y(item))
         action2.triggered.connect(lambda: self.unit_convertion(item))
+        action3.triggered.connect(lambda: self.open_color_picker(item))
+
+
 
         action2.setEnabled(True)
         if item.checkState() == QtCore.Qt.CheckState.Checked:
@@ -233,6 +240,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Show the context menu
         menu.exec_(self._tree_view.viewport().mapToGlobal(position))
+
+    def open_color_picker(self, item: CustomStandardItem):
+        if _color :=  item.itemData.costum_color:
+            color = QtWidgets.QColorDialog.getColor(QtGui.QColor(_color))
+        else:
+            color = QtWidgets.QColorDialog.getColor()
+
+
+        if color.isValid():
+            item.itemData.costum_color = color.name()
+            print(color.name())
 
     def unit_convertion(self, item: CustomStandardItem):
         print(item.itemData.data_type)
@@ -573,12 +591,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def _add_scatter_trace_to_fig(
             self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None, item=None
     ):
+
+        if item.itemData.costum_color:
+            color = item.itemData.costum_color
+        else:
+            color = None
         """Adds scatter trace to the fig"""
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name), hf_x=x, hf_y=y)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name, line=dict(color=color)), hf_x=x, hf_y=y)
 
         elif secondary_y and not is_boolean and not is_str:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3"), hf_x=x, hf_y=y)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3", line=dict(color=color)), hf_x=x, hf_y=y)
             self.fig.data[-1].update(yaxis="y3")
             self.fig.update_layout(
                 yaxis3=dict(
@@ -590,7 +613,7 @@ class MainWindow(QtWidgets.QMainWindow):
             )
 
         elif is_boolean:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y2"), hf_x=x, hf_y=y)
+            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y2", line=dict(color=color)), hf_x=x, hf_y=y)
             self.fig.data[-1].update(yaxis="y2")
             self.fig.update_layout(
                 yaxis2=dict(
@@ -609,6 +632,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     hovertext=hovertext,
                     mode="markers",
                     name=name,
+                    line=dict(color=color)
                 ),
                 hf_x=x,
                 hf_y=y,
@@ -625,7 +649,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         else:
             self.fig.add_trace(
-                go.Scatter(mode='lines', name=name),
+                go.Scatter(mode='lines', name=name, line=dict(color=color)),
                 hf_x=x,
                 hf_y=y,
             )
