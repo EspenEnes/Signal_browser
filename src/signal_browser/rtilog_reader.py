@@ -123,6 +123,7 @@ class MultiThreaded_RTI_Reader(QRunnable):
         else:
             self.df = pd.concat(self.df_list)
             self.df = self._dat_select_index(self.df)
+        self.df.sort_index(inplace=True)
 
         self.signals.Data_Signal.emit((self.item, self.df))
 
