@@ -597,6 +597,11 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             color = None
         """Adds scatter trace to the fig"""
+
+        #workaround to always have a trace in the fig
+        if len(self.fig.data) == 0:
+            self.fig.add_trace(go.Scatter(mode='lines'), hf_x=[], hf_y=[])
+
         if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
             self.fig.add_trace(go.Scatter(mode='lines', name=name, line=dict(color=color)), hf_x=x, hf_y=y)
 
