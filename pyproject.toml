@@ -37,7 +37,7 @@ dependencies = [
 "tdm-loader",
 "plotly-resampler == 0.9.2",
 "pint",
-"dash-daq"
+"dash_daq"
 ]
 
 [project.gui-scripts]
