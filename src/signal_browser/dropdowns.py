@@ -5,6 +5,7 @@ import pandas as pd
 import pathlib
 import plotly.graph_objects as go
 import pint
+from PySide6.QtGui import QPalette, QColor
 
 from .my_custom_classes import CustomStandardItemModel, CustomStandardItem
 from .novos_processes import NOVOSProcesses
@@ -53,8 +54,6 @@ class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
             option.backgroundBrush = QtGui.QColor('Yellow')
             option.text = f'{name} [{b_unit}->{c_unit}]'
 
-        # if item.itemData.costum_color:
-        #     option.backgroundBrush = QtGui.QColor(item.itemData.costum_color)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -62,13 +61,13 @@ class MainWindow(QtWidgets.QMainWindow):
     The MainWindow class represents the main window of the application. It inherits from the QtWidgets.QMainWindow class.
     """
 
-    def __init__(self, parent=None, port=8050):
+    def __init__(self, parent=None, port=8050, app=None):
         super().__init__(parent)
+        self.app = app
         self.resize(800, 600)
         self._host = "127.0.0.1"
         self._port = port
         self.ureg = pint.UnitRegistry()
-
         self.DASH_URL = f"http://{self._host}:{port}"
         self.init_ui_elements_and_vars()
         self.create_layout()
@@ -85,16 +84,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tree_view = QtWidgets.QTreeView(self)
         self._tree_view.setModel(self._standard_model)
         self._load_icon = QtGui.QIcon(str(pathlib.Path(__file__).parent.joinpath("Loading_icon2.png")))
-
         delegate = ColorizeDelegate(self._tree_view)
         self._tree_view.setItemDelegate(delegate)
-
         self.qdask = DashThread(host=self._host, port=self._port)
         self.browser = QtWebEngineWidgets.QWebEngineView(self)
         self.browser.load(QtCore.QUrl(self.DASH_URL))
         self.qdask.start()
         self._tree_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-
 
     def create_layout(self):
         """Creates the layout for the main window"""
@@ -106,11 +102,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.splitter.setSizes([200, 400])
         self.splitter.setStretchFactor(1, 1)
 
+    def dark_mode(self, dark):
+        if dark:
+            self.app.setPalette(get_darkModePalette(self.app))
+            self.app.setStyle("fusion")
+        else:
+            self.app.setPalette(QPalette())
+
     def connect_signals(self):
         """Connects the signals to the slots"""
         self._tree_view.doubleClicked.connect(self.on_double_clicked)
         self._standard_model.checkStateChanged.connect(self.on_channel_checkbox)
         self._tree_view.customContextMenuRequested.connect(self.open_context_menu)
+        self.qdask.theme_manager.is_dark_changed.connect(self.dark_mode)
 
         self.actionOpenFile.triggered.connect(self.on_actionOpenFile_triggered)
         self.actionShowNovosProcess.triggered.connect(self.show_novos_process)
@@ -164,7 +168,7 @@ class MainWindow(QtWidgets.QMainWindow):
             dialog.exec()
             return
 
-        self.qdask.update_progress(self.fig2)
+        self.qdask.update_graph(self.fig2)
         self.browser.reload()
 
         self.actionShowNovosProcess.setEnabled(False)
@@ -173,7 +177,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def show_mmc_process(self):
         self.fig2 = MMCProcesses.make_plotly_figure(self.log_file)
 
-        self.qdask.update_progress(self.fig2)
+        self.qdask.update_graph(self.fig2)
         self.browser.reload()
 
         self.actionShowMMCProcess.setEnabled(False)
@@ -229,8 +233,6 @@ class MainWindow(QtWidgets.QMainWindow):
         action2.triggered.connect(lambda: self.unit_convertion(item))
         action3.triggered.connect(lambda: self.open_color_picker(item))
 
-
-
         action2.setEnabled(True)
         if item.checkState() == QtCore.Qt.CheckState.Checked:
             action2.setEnabled(False)
@@ -242,11 +244,10 @@ class MainWindow(QtWidgets.QMainWindow):
         menu.exec_(self._tree_view.viewport().mapToGlobal(position))
 
     def open_color_picker(self, item: CustomStandardItem):
-        if _color :=  item.itemData.costum_color:
+        if _color := item.itemData.costum_color:
             color = QtWidgets.QColorDialog.getColor(QtGui.QColor(_color))
         else:
             color = QtWidgets.QColorDialog.getColor()
-
 
         if color.isValid():
             item.itemData.costum_color = color.name()
@@ -345,13 +346,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._standard_model.clear()
         self.fig.replace(go.Figure())
-        self.fig.update_layout(legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ))
         self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
@@ -367,13 +361,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_tdm_groups(self, groups):
         self._standard_model.clear()
         self.fig.replace(go.Figure())
-        self.fig.update_layout(legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ))
         self.qdask.update_graph(self.fig)
 
         root_node = self._standard_model.invisibleRootItem()
@@ -392,15 +379,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_dat_groups(self, filenames):
         self._standard_model.clear()
-        self.fig.replace(go.Figure())
-        self.fig.update_layout(legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        ))
-        self.qdask.update_graph(self.fig)
+        self.qdask.new_graph()
         valid_tables = []
 
         # read all files and find all tables that contains rti_json_sample that are not none
@@ -598,7 +577,7 @@ class MainWindow(QtWidgets.QMainWindow):
             color = None
         """Adds scatter trace to the fig"""
 
-        #workaround to always have a trace in the fig
+        # workaround to always have a trace in the fig
         if len(self.fig.data) == 0:
             self.fig.add_trace(go.Scatter(mode='lines'), hf_x=[], hf_y=[])
 
@@ -677,6 +656,31 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actionShowSignalBrowser.setEnabled(False)
 
 
+def get_darkModePalette(app=None):
+    darkPalette = app.palette()
+    darkPalette.setColor(QPalette.Window, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.WindowText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.Base, QColor(42, 42, 42))
+    darkPalette.setColor(QPalette.AlternateBase, QColor(66, 66, 66))
+    darkPalette.setColor(QPalette.ToolTipBase, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Text, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.Dark, QColor(35, 35, 35))
+    darkPalette.setColor(QPalette.Shadow, QColor(20, 20, 20))
+    darkPalette.setColor(QPalette.Button, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.BrightText, QColor(255, 0, 0))
+    darkPalette.setColor(QPalette.Link, QColor(42, 130, 218))
+    darkPalette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    darkPalette.setColor(QPalette.Disabled, QPalette.Highlight, QColor(80, 80, 80))
+    darkPalette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.HighlightedText, QColor(127, 127, 127)),
+
+    return darkPalette
+
 def main():
     """Main function"""
     import sys
@@ -690,7 +694,7 @@ def main():
     print(port)
 
     app = QtWidgets.QApplication(sys.argv)
-    window = MainWindow(port=port)
+    window = MainWindow(port=port, app=app)
     window.show()
     app.aboutToQuit.connect(window.qdask.stop)
     sys.exit(app.exec())
