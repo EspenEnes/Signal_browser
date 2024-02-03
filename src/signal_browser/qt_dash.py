@@ -176,7 +176,7 @@ class DashThread(QtCore.QThread):
         if len(value) > 0:
             fig["layout"]["hovermode"] = 'x unified'
             return fig
-        fig["layout"]["hovermode"] = False
+        fig["layout"]["hovermode"] = "closest"
         return fig
 
 

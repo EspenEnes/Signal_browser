@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import BinaryIO
 
 import pandas as pd
+from PySide6.QtGui import QPalette, QColor
 
 
 class TimeConversionUtils:
@@ -226,3 +227,31 @@ def zipfile_from_bytes(content_bytes):
     # Now you can use ZipFile to take the BytesIO output
     zfile = zipfile.ZipFile(zip_str, 'r')
     return zfile
+
+
+def get_darkModePalette(app=None):
+    darkPalette = app.palette()
+    darkPalette.setColor(QPalette.Window, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.WindowText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.Base, QColor(42, 42, 42))
+    darkPalette.setColor(QPalette.AlternateBase, QColor(66, 66, 66))
+    darkPalette.setColor(QPalette.ToolTipBase, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Text, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.Dark, QColor(35, 35, 35))
+    darkPalette.setColor(QPalette.Shadow, QColor(20, 20, 20))
+    darkPalette.setColor(QPalette.Button, QColor(53, 53, 53))
+    darkPalette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+    darkPalette.setColor(QPalette.BrightText, QColor(255, 0, 0))
+    darkPalette.setColor(QPalette.Link, QColor(42, 130, 218))
+    darkPalette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    darkPalette.setColor(QPalette.Disabled, QPalette.Highlight, QColor(80, 80, 80))
+    darkPalette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    darkPalette.setColor(QPalette.Disabled, QPalette.HighlightedText, QColor(127, 127, 127)),
+
+
+
+    return darkPalette

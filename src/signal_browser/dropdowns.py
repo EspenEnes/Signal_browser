@@ -1,12 +1,16 @@
 import sqlite3
-from enum import Enum, auto
+
+import numpy as np
 from PySide6 import QtCore, QtWidgets, QtWebEngineWidgets, QtGui
 import pandas as pd
 import pathlib
 import plotly.graph_objects as go
 import pint
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtGui import QPalette
 
+from .utils import get_darkModePalette
+from .colorize_delegate import ColorizeDelegate
+from .file_type import FileType
 from .my_custom_classes import CustomStandardItemModel, CustomStandardItem
 from .novos_processes import NOVOSProcesses
 from .mmc_processes import MMCProcesses
@@ -14,46 +18,6 @@ from .plclog_reader import PlcLogReader_Async
 from .tdmlog_reader import TdmGetGroupsWorker, TdmGetChannelsWorker, TdmGetDataWorker
 from .rtilog_reader import RTILogReader, MultiThreaded_RTI_Reader
 from .qt_dash import DashThread
-
-
-class FileType(Enum):
-    """
-    FileType is an enumeration class that represents different types of file formats.
-    """
-
-    TDM = auto()
-    DAT = auto()
-    DB = auto()
-    PLC_LOG = auto()
-    NONE = auto()
-
-
-class ColorizeDelegate(QtWidgets.QStyledItemDelegate):
-    """
-    Class: ColorizeDelegate
-
-        An item delegate class for colorizing the background and text of items in a view.
-
-    Inherits from:
-        QtWidgets.QStyledItemDelegate
-
-    Methods:
-        initStyleOption(option, index)
-            - Initializes the style options for the item at the given index.
-    """
-
-    def initStyleOption(self, option, index):
-        super().initStyleOption(option, index)
-        item = option.widget.model().itemFromIndex(index)
-
-        b_unit = item.itemData.b_unit
-        c_unit = item.itemData.c_unit
-        name = item.itemData.name
-
-        if b_unit and c_unit and name:
-            option.backgroundBrush = QtGui.QColor('Yellow')
-            option.text = f'{name} [{b_unit}->{c_unit}]'
-
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -251,10 +215,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if color.isValid():
             item.itemData.costum_color = color.name()
-            print(color.name())
 
     def unit_convertion(self, item: CustomStandardItem):
-        print(item.itemData.data_type)
         base_unit, conc_unit = self.open_unit_convertion_dialog()
         item.setItemData(b_unit=base_unit, c_unit=conc_unit)
 
@@ -314,7 +276,6 @@ class MainWindow(QtWidgets.QMainWindow):
             msg_box.setText(f"{input1} and {input2} is not compatible units")
             msg_box.exec()
             return None, None
-        return None, None
 
     def open_context_menu_secondary_y(self, item: CustomStandardItem):
         item.itemData.secondary_y = True
@@ -360,14 +321,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def load_tdm_groups(self, groups):
         self._standard_model.clear()
-        self.fig.replace(go.Figure())
-        self.qdask.update_graph(self.fig)
+        self.qdask.new_graph()
 
         root_node = self._standard_model.invisibleRootItem()
         for group in groups:
             group_node = CustomStandardItem(f"{group}")
             group_node.setEditable(False)
-            group_node.setItemData(id=group, node="root", secondary_y=False)
+            group_node.setItemData(id=group, node="root")
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
 
@@ -396,7 +356,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for table in valid_tables:
             group_node = CustomStandardItem(f"{table}")
             group_node.setEditable(False)
-            group_node.setItemData(id=table, node="root", secondary_y=False)
+            group_node.setItemData(id=table, node="root")
             root_node.appendRow(group_node)
         self._standard_model.sort(0, QtCore.Qt.AscendingOrder)
         self.actionShowNovosProcess.setEnabled(True)
@@ -445,7 +405,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def create_channel_item(self, name: str, idx: int | str, data_type=None):
         """Creates a standard QStandardItem"""
         channel_node = CustomStandardItem(name)
-        channel_node.setItemData(id=idx, name=name, node="leaf", secondary_y=False, data_type=data_type)
+        channel_node.setItemData(id=idx, name=name, node="leaf", data_type=data_type)
         channel_node.setCheckable(True)
         channel_node.setEditable(False)
         if data_type in [int, float, bool, str]:
@@ -486,19 +446,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.remove_load_icon(item)
         df = self.log_file[item.text()]
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item, secondary_y=item.itemData.secondary_y)
-        item.itemData.secondary_y = False
+        self._add_scatter_trace_to_fig(df, item=item)
 
     def _get_tdm_channel_data(self, data):
         item, df = data
         self.remove_load_icon(item)
         df = self._unit_convertion(item, df)
-        self._add_scatter_trace_to_fig(df.index, df, item.text(), item=item, secondary_y=item.itemData.secondary_y)
+        self._add_scatter_trace_to_fig(df, item=item)
 
     def _unit_convertion(self, item, df):
         b_unit = item.itemData.b_unit
         c_unit = item.itemData.c_unit
-        print(b_unit, c_unit)
         if b_unit and c_unit:
             a = df.to_numpy() * self.ureg[str(b_unit)]
             a = a.to(self.ureg[str(c_unit)])
@@ -508,7 +466,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _get_dat_channel_data(self, item):
         """Handles changes for DAT items"""
         self.set_load_icon(item)
-
         rti_get_data_threads = MultiThreaded_RTI_Reader(self.filenames, item)
         rti_get_data_threads.signals.Data_Signal.connect(self._dat_draw_channel_data)
         self.thread_pool.start(rti_get_data_threads)
@@ -516,134 +473,98 @@ class MainWindow(QtWidgets.QMainWindow):
     def _dat_draw_channel_data(self, data):
         item, df = data
         self.remove_load_icon(item)
-        item_name = item.itemData.id
-        data_type = item.itemData.data_type
-        table = item.parent().itemData.id
         df = self._unit_convertion(item, df)
-        is_boolean = self._dat_is_boolean(df, item_name)
-
-        # todo refactor this
-        if data_type == str:
-            y = [f"{table}-{item_name}" for x in df.values]
-            self._add_scatter_trace_to_fig(
-                df.index, y, f"{table}-{item_name}", is_str=True, hovertext=df.values, item=item
-            )
-            self.qdask.update_graph(self.fig)
-            self.browser.reload()
-            self.actionShowSignalBrowser.setEnabled(False)
-        else:
-            self._add_scatter_trace_to_fig(
-                df.index,
-                df,
-                f"{table}-{item_name}",
-                is_boolean=is_boolean,
-                secondary_y=item.itemData.secondary_y,
-                item=item,
-            )
-
-        item.itemData.secondary_y = False
-
-    def _dat_select_index(self, df):
-        if not df[df.columns[0]].isna().all():
-            df.drop("SampleInfo_reception_timestamp", axis=1, inplace=True)
-            df.set_index("json_extract(rti_json_sample, '$.timestamp')", inplace=True)
-        else:
-            df.drop("json_extract(rti_json_sample, '$.timestamp')", axis=1, inplace=True)
-            df.set_index("SampleInfo_reception_timestamp", inplace=True)
-        df = df.squeeze()
-        df.sort_index(inplace=True)
-        return df
-
-    def _dat_is_boolean(self, df, item_name):
-        if df.isin([0, 1]).all():
-            is_boolean = True
-        elif df.isin([1]).all():
-            is_boolean = True
-        elif df.isin([0]).all():
-            is_boolean = True
-        elif item_name == "novosControl":
-            is_boolean = True
-        else:
-            is_boolean = False
-        return is_boolean
+        self._add_scatter_trace_to_fig(df, item=item)
 
     def _add_scatter_trace_to_fig(
-            self, x, y, name, is_boolean=False, secondary_y=False, is_str=False, hovertext=None, item=None
-    ):
-
-        if item.itemData.costum_color:
-            color = item.itemData.costum_color
-        else:
-            color = None
-        """Adds scatter trace to the fig"""
+            self, df, item=None):
+        color = item.itemData.costum_color if item.itemData.costum_color else None
 
         # workaround to always have a trace in the fig
         if len(self.fig.data) == 0:
             self.fig.add_trace(go.Scatter(mode='lines'), hf_x=[], hf_y=[])
+            self.fig.data[-1].update(yaxis="y")
 
-        if len(self.fig.data) == 0 and not is_boolean and not secondary_y and not is_str:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name, line=dict(color=color)), hf_x=x, hf_y=y)
-
-        elif secondary_y and not is_boolean and not is_str:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y3", line=dict(color=color)), hf_x=x, hf_y=y)
-            self.fig.data[-1].update(yaxis="y3")
-            self.fig.update_layout(
-                yaxis3=dict(
-                    side='right',
-                    overlaying='y',
-                    showgrid=False,
-                    minor_showgrid=False,
-                )
-            )
-
-        elif is_boolean:
-            self.fig.add_trace(go.Scatter(mode='lines', name=name, yaxis="y2", line=dict(color=color)), hf_x=x, hf_y=y)
-            self.fig.data[-1].update(yaxis="y2")
-            self.fig.update_layout(
-                yaxis2=dict(
-                    range=[-0.1, 1.1],
-                    overlaying='y',
-                    side='left',
-                    fixedrange=True,
-                    showgrid=False,
-                    minor_showgrid=False,
-                    showticklabels=False,
-                )
-            )
-        elif is_str:
-            self.fig.add_trace(
-                go.Scatter(
-                    hovertext=hovertext,
-                    mode="markers",
-                    name=name,
-                    line=dict(color=color)
-                ),
-                hf_x=x,
-                hf_y=y,
-            )
-            self.fig.data[-1].update(yaxis="y4")
-            self.fig.update_layout(
-                yaxis4=dict(
-                    side='right',
-                    overlaying='y',
-                    showgrid=False,
-                    minor_showgrid=False,
-                )
-            )
-
+        if item.itemData.data_type == bool:
+            self._add_bool_trace(df, item, color)
+        elif item.itemData.data_type == str:
+            self._add_str_trace(df, item, color)
+        elif item.itemData.secondary_y:
+            self._add_secondary_y_trace(df, item, color)
         else:
-            self.fig.add_trace(
-                go.Scatter(mode='lines', name=name, line=dict(color=color)),
-                hf_x=x,
-                hf_y=y,
-            )
+            self._add_default_trace(df, item, color)
 
         item.itemData.trace_uid = self.fig.data[-1].uid
+        item.itemData.secondary_y = False
 
         if self.thread_pool.activeThreadCount() == 0:
             self.qdask.update_graph(self.fig)
             self.browser.reload()
             self.actionShowSignalBrowser.setEnabled(False)
+
+    def _add_bool_trace(self, df, item, color):
+        self.fig.add_trace(
+            go.Scatter(mode='lines', name=item.itemData.name, yaxis="y3", line=dict(color=color)),
+            hf_x=df.index,
+            hf_y=df)
+
+        self.fig.data[-1].update(yaxis="y3")
+        self.fig.update_layout(
+            yaxis3=dict(
+                range=[-0.1, 1.1],
+                overlaying='y',
+                side='left',
+                fixedrange=True,
+                showgrid=False,
+                minor_showgrid=False,
+                showticklabels=False,
+            )
+        )
+
+    def _add_str_trace(self, df, item, color):
+        table = item.parent().itemData.id
+        name = f"{table}-{item.itemData.name}"
+        self.fig.add_trace(
+            go.Scatter(mode="markers", name=name, yaxis="y4", hovertext=df.values, line=dict(color=color)),
+            hf_x=df.index,
+            hf_y=np.repeat(name, len(df)),
+        )
+        self.fig.data[-1].update(yaxis="y4")
+        self.fig.update_layout(
+            yaxis4=dict(
+                overlaying='y',
+                side='right',
+                showgrid=False,
+                minor_showgrid=False,
+                anchor="free",
+                autoshift=True
+
+            )
+        )
+
+    def _add_secondary_y_trace(self, df, item, color):
+        self.fig.add_trace(
+            go.Scatter(mode='lines', name=item.itemData.name, yaxis="y2", line=dict(color=color)),
+            hf_x=df.index,
+            hf_y=df)
+
+        self.fig.data[-1].update(yaxis="y2")
+        self.fig.update_layout(
+            yaxis2=dict(
+                side='right',
+                overlaying='y',
+                showgrid=False,
+                minor_showgrid=False,
+            )
+        )
+
+    def _add_default_trace(self, df, item, color):
+        self.fig.add_trace(
+            go.Scatter(mode='lines', name=item.itemData.name, yaxis="y", line=dict(color=color)),
+            hf_x=df.index,
+            hf_y=df,
+        )
+        self.fig.data[-1].update(yaxis="y")
 
     def _remove_trace_by_item_name(self, item):
         uid = item.itemData.trace_uid
@@ -656,31 +577,6 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actionShowSignalBrowser.setEnabled(False)
 
 
-def get_darkModePalette(app=None):
-    darkPalette = app.palette()
-    darkPalette.setColor(QPalette.Window, QColor(53, 53, 53))
-    darkPalette.setColor(QPalette.WindowText, QColor(255, 255, 255))
-    darkPalette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
-    darkPalette.setColor(QPalette.Base, QColor(42, 42, 42))
-    darkPalette.setColor(QPalette.AlternateBase, QColor(66, 66, 66))
-    darkPalette.setColor(QPalette.ToolTipBase, QColor(53, 53, 53))
-    darkPalette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
-    darkPalette.setColor(QPalette.Text, QColor(255, 255, 255))
-    darkPalette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
-    darkPalette.setColor(QPalette.Dark, QColor(35, 35, 35))
-    darkPalette.setColor(QPalette.Shadow, QColor(20, 20, 20))
-    darkPalette.setColor(QPalette.Button, QColor(53, 53, 53))
-    darkPalette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
-    darkPalette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
-    darkPalette.setColor(QPalette.BrightText, QColor(255, 0, 0))
-    darkPalette.setColor(QPalette.Link, QColor(42, 130, 218))
-    darkPalette.setColor(QPalette.Highlight, QColor(42, 130, 218))
-    darkPalette.setColor(QPalette.Disabled, QPalette.Highlight, QColor(80, 80, 80))
-    darkPalette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
-    darkPalette.setColor(QPalette.Disabled, QPalette.HighlightedText, QColor(127, 127, 127)),
-
-    return darkPalette
-
 def main():
     """Main function"""
     import sys
@@ -691,7 +587,6 @@ def main():
 
     args = parser.parse_args()
     port = args.port
-    print(port)
 
     app = QtWidgets.QApplication(sys.argv)
     window = MainWindow(port=port, app=app)
