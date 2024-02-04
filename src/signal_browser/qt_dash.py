@@ -109,13 +109,8 @@ class DashThread(QtCore.QThread):
     #     return no_update
 
     def new_graph(self):
-        fig = go.Figure()
-
-        if self.theme_manager.is_dark:
-            fig["layout"]["template"] = pio.templates["plotly_dark+costum"]
-        else:
-            fig["layout"]["template"] = pio.templates["plotly+costum"]
-        self._app.layout = self.root_layout({}, fig.layout)
+        self.fig.replace(go.Figure())
+        self.update_graph(self.fig)
 
     def update_graph(self, fig):
         """Updates the graph with the given figure"""
@@ -133,6 +128,7 @@ class DashThread(QtCore.QThread):
     )
     def multiplot(n_clicks, fig):
         """multi-plot graph where each data series has its y-axis and corresponding color"""
+
         if fig and n_clicks:
             for ix, data in enumerate(fig['data'], start=0):
                 if ix == 0:

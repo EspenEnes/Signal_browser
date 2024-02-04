@@ -161,7 +161,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.filename = self.filenames[0]
-        self.qdask.update_graph(self.fig)
+
+        self._standard_model.clear()
+        self.qdask.new_graph()
         self.browser.reload()
 
         if pathlib.Path(self.filename).suffix.lower() in [".dat", ".db"]:
@@ -305,10 +307,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def load_PlcLog_file(self, filename):
         self.log_file = PlcLogReader_Async.read_logfile(filename)
 
-        self._standard_model.clear()
-        self.fig.replace(go.Figure())
-        self.qdask.update_graph(self.fig)
-
         root_node = self._standard_model.invisibleRootItem()
         for channel in self.log_file.columns:
             channel_node = self.create_channel_item(channel, channel)
@@ -320,9 +318,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._tree_view.setSortingEnabled(True)
 
     def load_tdm_groups(self, groups):
-        self._standard_model.clear()
-        self.qdask.new_graph()
-
         root_node = self._standard_model.invisibleRootItem()
         for group in groups:
             group_node = CustomStandardItem(f"{group}")
@@ -338,8 +333,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_type = FileType.TDM
 
     def load_dat_groups(self, filenames):
-        self._standard_model.clear()
-        self.qdask.new_graph()
         valid_tables = []
 
         # read all files and find all tables that contains rti_json_sample that are not none
@@ -476,8 +469,7 @@ class MainWindow(QtWidgets.QMainWindow):
         df = self._unit_convertion(item, df)
         self._add_scatter_trace_to_fig(df, item=item)
 
-    def _add_scatter_trace_to_fig(
-            self, df, item=None):
+    def _add_scatter_trace_to_fig(self, df, item):
         color = item.itemData.costum_color if item.itemData.costum_color else None
 
         # workaround to always have a trace in the fig
